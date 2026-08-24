@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleIdentifier</key>
+	<string>com.wlee.remind</string>
+	<key>CFBundleName</key>
+	<string>remind</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>remind reads and edits your reminders from the command line.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>remind reads and edits your reminders from the command line.</string>
+</dict>
+</plist>
