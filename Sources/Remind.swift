@@ -26,12 +26,12 @@ struct Remind {
         let app = Reminders()
 
         switch args.command {
+        case "", "list", "ls", "show-all":
+            try await Commands.list(app, args)
         case "auth":
             try await Commands.auth(app, args)
         case "lists", "l":
             try await Commands.lists(app, args)
-        case "list", "ls", "show-all":
-            try await Commands.list(app, args)
         case "add", "a", "new":
             try await Commands.add(app, args)
         case "done", "complete", "check", "x":

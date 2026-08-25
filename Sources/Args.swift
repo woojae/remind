@@ -25,7 +25,7 @@ struct Args {
 
     static func parse(_ argv: [String]) throws -> Args {
         var argv = argv
-        let command = argv.isEmpty ? "help" : argv.removeFirst()
+        let command = argv.isEmpty ? "" : argv.removeFirst()
         var args = Args(command: command)
         var passthrough = false
 
