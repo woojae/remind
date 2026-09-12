@@ -22,6 +22,14 @@ struct RemindApp: App {
             }
         }
 
+        Window("New Task", id: "quickadd") {
+            QuickAddPanel()
+                .environmentObject(store)
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultPosition(.top)
+
         MenuBarExtra {
             MenuBarContent().environmentObject(store)
         } label: {
@@ -41,13 +49,15 @@ struct MenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        let count = store.now.count
-        HStack(spacing: 3) {
-            Image(systemName: count > 0 ? "bell.badge.fill" : "bell")
-            if count > 0 { Text(String(count)) }
-        }
+        // Icon only: on notched Macs the menu bar is often within a few
+        // points of full, and macOS hides any item that doesn't fit.
+        Image(systemName: store.now.isEmpty ? "bell" : "bell.badge.fill")
         .onReceive(NotificationCenter.default.publisher(for: Notifier.openMainWindow)) { _ in
             openWindow(id: "main")
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notifier.openQuickAdd)) { _ in
+            openWindow(id: "quickadd")
             NSApp.activate(ignoringOtherApps: true)
         }
     }
@@ -58,9 +68,13 @@ struct MenuBarContent: View {
 
     var body: some View {
         let now = store.now
-        if now.isEmpty {
-            Text("Nothing due right now")
-        } else {
+        Text(now.isEmpty ? "Nothing due now" : "\(now.count) due now")
+        Button("New Task…") {
+            NotificationCenter.default.post(name: Notifier.openQuickAdd, object: nil)
+        }
+        .keyboardShortcut("n")
+        Divider()
+        if !now.isEmpty {
             ForEach(now.prefix(12)) { item in
                 Menu(item.title) {
                     Text(Display.when(item, now: store.clock))

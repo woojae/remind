@@ -40,6 +40,8 @@ struct QuickAddBar: View {
     @EnvironmentObject var store: TaskStore
     @FocusState private var focused: Bool
     @State private var text = ""
+    /// Called after a task is added; the floating panel uses it to close.
+    var onAdded: (() -> Void)? = nil
 
     private var parsed: QuickAdd.Result { QuickAdd.parse(text, now: store.clock) }
 
@@ -91,7 +93,52 @@ struct QuickAddBar: View {
         guard !value.isEmpty else { return }
         store.add(value)
         text = ""
+        onAdded?()
     }
+}
+
+/// The compact floating panel opened from the menu bar. Just the quick-add
+/// field: type, Return, gone.
+struct QuickAddPanel: View {
+    @EnvironmentObject var store: TaskStore
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        VStack(spacing: 0) {
+            QuickAddBar(onAdded: { dismissWindow(id: "quickadd") })
+            HStack {
+                Text("Return to add · Esc to cancel")
+                Spacer()
+                Text(store.now.isEmpty ? "Nothing due now" : "\(store.now.count) due now")
+            }
+            .font(.caption)
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
+            .background(.bar)
+        }
+        .frame(width: 480)
+        .onExitCommand { dismissWindow(id: "quickadd") }
+        .background(WindowConfigurator())
+    }
+}
+
+/// Floats the panel above other windows and lets it close on Escape.
+private struct WindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.level = .floating
+            window.isMovableByWindowBackground = true
+            window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
+            window.standardWindowButton(.miniaturizeButton)?.isHidden = true
+            window.standardWindowButton(.zoomButton)?.isHidden = true
+            window.makeKeyAndOrderFront(nil)
+        }
+        return view
+    }
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 // MARK: - List
