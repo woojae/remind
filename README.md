@@ -16,6 +16,58 @@ $ remind done 2
 done  7c2d90  Standup notes
 ```
 
+## Remind.app — the macOS app
+
+The same EventKit core, as a small always-running Mac app modelled on
+[Marco Arment's Unforgetful](https://marco.org/2026/08/14/unforgetful):
+reminders for people who forget reminders.
+
+- **One flat list.** Two groups: **Now** and **Later**. No folders, tags,
+  smart lists, or modes. A hidden task is a forgotten task.
+- **Nothing is overdue.** A task whose time has passed is simply *due now*.
+  It reads "Since 3:15 PM", never "overdue", and it is never red.
+- **Notifications repeat until you deal with the task.** Dismissing one
+  changes nothing; it comes back after the repeat interval (default 10
+  minutes) until the task is completed, snoozed, or deleted. Several due
+  tasks are spaced out rather than dumped on you at once, and quiet hours
+  (default 10 PM–8 AM) hold everything until morning.
+- **Snooze scales.** The ladder is 10 min → 30 min → 1 h → 3 h → tomorrow
+  morning → 3 days → a week. Every option shows the actual time it lands on,
+  and the suggested rung climbs each time you snooze the same task.
+- **Recurring tasks don't pile up.** Completing a repeating task you missed
+  schedules the next occurrence from *now*, not from the date you skipped.
+- **It is your Reminders database.** Siri, the Reminders app, and your phone
+  all keep working; nothing is imported or duplicated. Tasks created here get
+  a Reminders alarm too, so other devices notify you (Settings can turn that
+  off).
+- **Quick add** understands dates in the sentence: `Call mom tomorrow 5pm`,
+  `Water plants in 3 days`, `Standup at noon`. A task with no date is due
+  now. The mic button starts macOS dictation.
+- **Menu bar item** shows how many tasks are due now, with Done/Snooze for
+  each. Closing the window keeps the app (and the nagging) running.
+
+### Build and run
+
+```bash
+make app           # -> .build/Remind.app
+make run-app       # open it
+make install-app   # copy to ~/Applications (APPINSTALL=/Applications to override)
+```
+
+On first launch macOS asks for Reminders access and for notification
+permission. Both are attributed to Remind itself, not to your terminal.
+Turn on **Launch at login** in Settings so it is always running; it only
+notifies while it is open.
+
+Because tasks also carry a Reminders alarm, Reminders.app will post its own
+one-time notification at the due moment. If you find that redundant, turn
+off notifications for Reminders in **System Settings → Notifications**, or
+uncheck "Also set a Reminders alarm" in Remind's settings.
+
+The app's own bookkeeping — when each task was last announced and how many
+times it has been snoozed — lives in
+`~/Library/Application Support/Remind/state.json`, not in the reminder.
+
 ## Install
 
 ```bash
@@ -99,7 +151,7 @@ remind lists --json | jq -r '.[] | select(.default).name'
 
 ## How it works
 
-`Sources/` is five files:
+The CLI's `Sources/` is five files:
 
 - `Remind.swift` — entry point and command implementations
 - `Store.swift` — EventKit wrapper, permissions, reference resolution
@@ -107,6 +159,16 @@ remind lists --json | jq -r '.[] | select(.default).name'
 - `Format.swift` — table, detail, and JSON rendering
 - `Args.swift` — option parsing
 - `Help.swift` — help text
+
+The app in `App/` reuses `Store.swift` and `DateParse.swift` and adds:
+
+- `RemindApp.swift` — scenes (window, menu bar item, settings) and app delegate
+- `TaskStore.swift` — the observable list, completion, snooze, recurrence
+- `Notifier.swift` — the repeat-until-done notification loop and its actions
+- `Snooze.swift` — the snooze ladder and the on-disk nag state
+- `QuickAdd.swift` — pulls a due date out of a typed sentence
+- `Views.swift`, `SettingsView.swift`, `Display.swift` — SwiftUI
+- `mkicon.swift` — renders the app icon at build time
 
 Two macOS details the `Makefile` handles, both of which break the binary if
 skipped:
