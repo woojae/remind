@@ -11,14 +11,17 @@ enum DateParse {
 
     // MARK: - Entry point
 
-    static func parse(_ raw: String, now: Date = Date()) -> ParsedDate? {
+    /// `useDetector: false` restricts parsing to the explicit grammar above,
+    /// skipping the fuzzy system detector. Callers that pull a date out of
+    /// free text (the app's quick-add field) use it to avoid false positives.
+    static func parse(_ raw: String, now: Date = Date(), useDetector: Bool = true) -> ParsedDate? {
         let input = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { return nil }
         let lower = input.lowercased()
 
         if let p = explicit(lower, now: now) { return p }
         if let p = relative(lower, now: now) { return p }
-        if let p = detector(input, now: now) { return p }
+        if useDetector, let p = detector(input, now: now) { return p }
         return nil
     }
 
