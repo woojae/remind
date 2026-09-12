@@ -106,6 +106,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Task { @MainActor in
             await TaskStore.shared.start()
+            if let dir = Snapshot.requestedDirectory {
+                await Snapshot.run(into: dir, store: TaskStore.shared)
+            }
             Notifier.shared.start()
         }
     }

@@ -30,21 +30,26 @@ struct SettingsView: View {
                     ForEach([10, 30, 60, 120], id: \.self) { Text("\($0) seconds").tag($0) }
                 }
                 Toggle("Quiet hours", isOn: $quietEnabled)
-                HStack {
-                    HourPicker("From", hour: $quietStart)
-                    HourPicker("to", hour: $quietEnd)
+                LabeledContent("From") {
+                    HStack(spacing: 6) {
+                        HourPicker(hour: $quietStart)
+                        Text("to")
+                        HourPicker(hour: $quietEnd)
+                    }
                 }
                 .disabled(!quietEnabled)
-                HourPicker("Morning is", hour: $morningHour)
-                Toggle("Also set a Reminders alarm (notifies your other devices)", isOn: $attachAlarms)
+                LabeledContent("Morning starts at") {
+                    HourPicker(hour: $morningHour)
+                }
+                Toggle("Set a Reminders alarm too", isOn: $attachAlarms)
+                Text("Alarms are what notify your other devices. Reminders.app on this Mac will also show one banner at the due time.")
+                    .font(.caption).foregroundStyle(.secondary)
                 if notifier.authorized == false {
-                    LabeledContent("Permission") {
-                        HStack {
-                            Text("Notifications are off for Remind.").foregroundStyle(.red)
-                            Button("Open System Settings") {
-                                if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
-                                    NSWorkspace.shared.open(url)
-                                }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Notifications are turned off for Remind.").foregroundStyle(.red)
+                        Button("Open Notification Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+                                NSWorkspace.shared.open(url)
                             }
                         }
                     }
@@ -67,12 +72,12 @@ struct SettingsView: View {
                 Toggle("Launch at login", isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, on in setLogin(on) }
                 if let loginError { Text(loginError).font(.caption).foregroundStyle(.red) }
-                Text("Remind only notifies while it's running. Keep it open or launch it at login.")
+                Text("Remind only notifies while it's running.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480)
+        .frame(width: 460, height: 620)
         .onAppear { notifier.refreshAuthorization() }
         .onChange(of: excludedRaw) { _, _ in Task { await store.refresh() } }
     }
@@ -100,21 +105,16 @@ struct SettingsView: View {
 }
 
 struct HourPicker: View {
-    let label: String
     @Binding var hour: Int
 
-    init(_ label: String, hour: Binding<Int>) {
-        self.label = label
-        _hour = hour
-    }
-
     var body: some View {
-        Picker(label, selection: $hour) {
+        Picker("", selection: $hour) {
             ForEach(0..<24, id: \.self) { h in
                 Text(Self.name(h)).tag(h)
             }
         }
-        .fixedSize()
+        .labelsHidden()
+        .frame(width: 90)
     }
 
     static func name(_ h: Int) -> String {
