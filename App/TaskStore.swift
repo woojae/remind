@@ -9,6 +9,7 @@ struct TaskItem: Identifiable, Equatable {
     let title: String
     let notes: String?
     let listName: String
+    let listID: String
     let listColor: NSColor?
     /// Effective due moment. All-day reminders resolve to the morning hour.
     let due: Date?
@@ -121,6 +122,7 @@ final class TaskStore: ObservableObject {
             title: r.title?.isEmpty == false ? r.title! : "(untitled)",
             notes: r.notes?.isEmpty == false ? r.notes : nil,
             listName: r.calendar?.title ?? "",
+            listID: r.calendar?.calendarIdentifier ?? "",
             listColor: color,
             due: due,
             isAllDay: r.isAllDay,
@@ -224,17 +226,31 @@ final class TaskStore: ObservableObject {
     }
 
     /// Explicit reschedule from the editor. Resets the snooze ladder.
-    func update(_ item: TaskItem, title: String, due: ParsedDate?, notes: String) {
+    func update(_ item: TaskItem, title: String, due: ParsedDate?, notes: String, listID: String? = nil) {
         guard let r = reminders[item.id] else { return }
         attempt {
             r.title = title.trimmingCharacters(in: .whitespaces)
             r.notes = notes.isEmpty ? nil : notes
+            if let listID, listID != item.listID,
+               let target = lists.first(where: { $0.calendarIdentifier == listID }) {
+                r.calendar = target
+            }
             let changedDue = due?.date != r.dueDate || (due == nil) != (r.dueDate == nil)
             if changedDue {
                 r.setDue(due, attachAlarm: Prefs.attachAlarms)
                 state.forget(item.id)
                 Notifier.shared.clear(item.id)
             }
+            try ek.save(r)
+        }
+        scheduleRefresh()
+    }
+
+    func move(_ item: TaskItem, to listID: String) {
+        guard let r = reminders[item.id],
+              let target = lists.first(where: { $0.calendarIdentifier == listID }) else { return }
+        attempt {
+            r.calendar = target
             try ek.save(r)
         }
         scheduleRefresh()

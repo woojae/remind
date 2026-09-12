@@ -217,6 +217,16 @@ struct TaskRow: View {
             Menu("Snooze") { SnoozeButtons(item: item) }
             Divider()
             Button("Edit…") { editing = item }
+            Menu("Move to") {
+                ForEach(store.lists, id: \.calendarIdentifier) { list in
+                    Button {
+                        store.move(item, to: list.calendarIdentifier)
+                    } label: {
+                        Text(list.calendarIdentifier == item.listID ? "✓ \(list.title)" : list.title)
+                    }
+                    .disabled(list.calendarIdentifier == item.listID)
+                }
+            }
             Button("Open in Reminders") { store.openInReminders(item) }
             Divider()
             Button("Delete", role: .destructive) { store.delete(item) }
@@ -261,12 +271,14 @@ struct EditorView: View {
     @State private var title: String
     @State private var dueText: String
     @State private var notes: String
+    @State private var listID: String
 
     init(item: TaskItem) {
         self.item = item
         _title = State(initialValue: item.title)
         _dueText = State(initialValue: Display.editable(item))
         _notes = State(initialValue: item.notes ?? "")
+        _listID = State(initialValue: item.listID)
     }
 
     private var parsedDue: ParsedDate? {
@@ -295,7 +307,11 @@ struct EditorView: View {
                         .frame(minHeight: 70, maxHeight: 140)
                         .overlay(RoundedRectangle(cornerRadius: 5).stroke(.quaternary))
                 }
-                LabeledContent("List", value: item.listName)
+                Picker("List", selection: $listID) {
+                    ForEach(store.lists, id: \.calendarIdentifier) { list in
+                        Text(list.title).tag(list.calendarIdentifier)
+                    }
+                }
                 if item.isRecurring {
                     Text("Repeats. Completing it schedules the next occurrence from today.")
                         .font(.caption).foregroundStyle(.secondary)
@@ -310,7 +326,7 @@ struct EditorView: View {
                 Spacer()
                 Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
                 Button("Save") {
-                    store.update(item, title: title, due: parsedDue, notes: notes)
+                    store.update(item, title: title, due: parsedDue, notes: notes, listID: listID)
                     dismiss()
                 }
                 .keyboardShortcut(.defaultAction)
