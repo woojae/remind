@@ -18,6 +18,7 @@ final class Notifier: NSObject, ObservableObject {
     }
 
     static let openMainWindow = Notification.Name("RemindOpenMainWindow")
+    static let openQuickAdd = Notification.Name("RemindOpenQuickAdd")
 
     func start() {
         guard let center else { return }
