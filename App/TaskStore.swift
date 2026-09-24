@@ -6,17 +6,17 @@ import Foundation
 /// EventKit objects directly.
 struct TaskItem: Identifiable, Equatable {
     let id: String
-    let title: String
-    let notes: String?
-    let listName: String
-    let listID: String
-    let listColor: NSColor?
+    var title: String
+    var notes: String?
+    var listName: String
+    var listID: String
+    var listColor: NSColor?
     /// Effective due moment. All-day reminders resolve to the morning hour.
-    let due: Date?
-    let isAllDay: Bool
+    var due: Date?
+    var isAllDay: Bool
     let isRecurring: Bool
     let created: Date?
-    let snoozeCount: Int
+    var snoozeCount: Int
 
     func isNow(at now: Date) -> Bool { due.map { $0 <= now } ?? true }
 }
@@ -103,19 +103,23 @@ final class TaskStore: ObservableObject {
         state.prune(keeping: Set(map.keys))
         items = found.map(makeItem)
         clock = Date()
-        NSApp.dockTile.badgeLabel = now.isEmpty ? nil : String(now.count)
+        updateBadge()
     }
 
     func tick() {
         clock = Date()
-        NSApp.dockTile.badgeLabel = now.isEmpty ? nil : String(now.count)
+        updateBadge()
+    }
+
+    /// All-day reminders are shown as due at the morning hour.
+    private static func effectiveDue(_ date: Date?, isAllDay: Bool) -> Date? {
+        date.map { d in
+            guard isAllDay else { return d }
+            return Calendar.current.date(bySettingHour: Prefs.morningHour, minute: 0, second: 0, of: d) ?? d
+        }
     }
 
     private func makeItem(_ r: EKReminder) -> TaskItem {
-        let due: Date? = r.dueDate.map { d in
-            guard r.isAllDay else { return d }
-            return Calendar.current.date(bySettingHour: Prefs.morningHour, minute: 0, second: 0, of: d) ?? d
-        }
         let color = r.calendar?.cgColor.flatMap { NSColor(cgColor: $0) }
         return TaskItem(
             id: r.calendarItemIdentifier,
@@ -124,11 +128,36 @@ final class TaskStore: ObservableObject {
             listName: r.calendar?.title ?? "",
             listID: r.calendar?.calendarIdentifier ?? "",
             listColor: color,
-            due: due,
+            due: Self.effectiveDue(r.dueDate, isAllDay: r.isAllDay),
             isAllDay: r.isAllDay,
             isRecurring: r.hasRecurrenceRules,
             created: r.creationDate,
             snoozeCount: state.snoozeCount[r.calendarItemIdentifier] ?? 0)
+    }
+
+    // MARK: - Optimistic updates
+    //
+    // EventKit saves synchronously but the change notification that triggers
+    // a refresh is debounced, so the list would otherwise lag every action by
+    // about half a second. Apply the expected result locally first; the
+    // refresh that follows reconciles against what EventKit actually stored.
+
+    private func updateBadge() {
+        NSApp.dockTile.badgeLabel = now.isEmpty ? nil : String(now.count)
+    }
+
+    private func removeLocal(_ id: String) {
+        items.removeAll { $0.id == id }
+        updateBadge()
+    }
+
+    private func replaceLocal(_ item: TaskItem) {
+        if let i = items.firstIndex(where: { $0.id == item.id }) {
+            items[i] = item
+        } else {
+            items.append(item)
+        }
+        updateBadge()
     }
 
     // MARK: - Actions
@@ -164,18 +193,24 @@ final class TaskStore: ObservableObject {
         guard let r = reminders[item.id] else { return }
         attempt {
             let previous = r.dueDateComponents
+            var updated: TaskItem?
             if r.hasRecurrenceRules, let rule = r.recurrenceRules?.first {
                 // Skip every missed occurrence: the next one is measured from now,
                 // not from the date you were supposed to do it.
                 let base = r.dueDate ?? Date()
                 let next = Self.nextOccurrence(after: Date(), from: base, rule: rule)
                 r.setDue(ParsedDate(date: next, hasTime: !r.isAllDay), attachAlarm: Prefs.attachAlarms)
+                var copy = item
+                copy.due = Self.effectiveDue(next, isAllDay: r.isAllDay)
+                copy.snoozeCount = 0
+                updated = copy
             } else {
                 r.isCompleted = true
             }
             try ek.save(r)
             state.forget(item.id)
             Notifier.shared.clear(item.id)
+            if let updated { replaceLocal(updated) } else { removeLocal(item.id) }
             offerUndo(UndoRecord(item: item, previousDue: previous))
         }
         scheduleRefresh()
@@ -199,6 +234,7 @@ final class TaskStore: ObservableObject {
             }
             try ek.save(r)
             state.snoozeCount[record.item.id] = record.item.snoozeCount
+            replaceLocal(record.item)
         }
         scheduleRefresh()
     }
@@ -221,6 +257,11 @@ final class TaskStore: ObservableObject {
             state.snoozeCount[item.id, default: 0] += 1
             state.lastNotified[item.id] = nil
             Notifier.shared.clear(item.id)
+            var copy = item
+            copy.due = date
+            copy.isAllDay = false
+            copy.snoozeCount = state.snoozeCount[item.id] ?? 0
+            replaceLocal(copy)
         }
         scheduleRefresh()
     }
@@ -229,19 +270,29 @@ final class TaskStore: ObservableObject {
     func update(_ item: TaskItem, title: String, due: ParsedDate?, notes: String, listID: String? = nil) {
         guard let r = reminders[item.id] else { return }
         attempt {
+            var copy = item
             r.title = title.trimmingCharacters(in: .whitespaces)
             r.notes = notes.isEmpty ? nil : notes
+            copy.title = r.title?.isEmpty == false ? r.title! : "(untitled)"
+            copy.notes = r.notes
             if let listID, listID != item.listID,
                let target = lists.first(where: { $0.calendarIdentifier == listID }) {
                 r.calendar = target
+                copy.listID = target.calendarIdentifier
+                copy.listName = target.title
+                copy.listColor = target.cgColor.flatMap { NSColor(cgColor: $0) }
             }
             let changedDue = due?.date != r.dueDate || (due == nil) != (r.dueDate == nil)
             if changedDue {
                 r.setDue(due, attachAlarm: Prefs.attachAlarms)
                 state.forget(item.id)
                 Notifier.shared.clear(item.id)
+                copy.isAllDay = due.map { !$0.hasTime } ?? false
+                copy.due = Self.effectiveDue(due?.date, isAllDay: copy.isAllDay)
+                copy.snoozeCount = 0
             }
             try ek.save(r)
+            replaceLocal(copy)
         }
         scheduleRefresh()
     }
@@ -252,6 +303,11 @@ final class TaskStore: ObservableObject {
         attempt {
             r.calendar = target
             try ek.save(r)
+            var copy = item
+            copy.listID = target.calendarIdentifier
+            copy.listName = target.title
+            copy.listColor = target.cgColor.flatMap { NSColor(cgColor: $0) }
+            replaceLocal(copy)
         }
         scheduleRefresh()
     }
@@ -262,6 +318,7 @@ final class TaskStore: ObservableObject {
             try ek.remove(r)
             state.forget(item.id)
             Notifier.shared.clear(item.id)
+            removeLocal(item.id)
         }
         scheduleRefresh()
     }

@@ -2,29 +2,37 @@ import Foundation
 
 /// Human phrasing for due dates. Deliberately never says "overdue".
 enum Display {
-    static func time(_ date: Date) -> String {
+    /// DateFormatter is expensive to create and these run once per row per
+    /// render, so keep one instance per format. All callers are on the main
+    /// actor.
+    private static var formatters: [String: DateFormatter] = [:]
+    private static func formatter(_ format: String, posix: Bool = false) -> DateFormatter {
+        let key = posix ? "posix:" + format : format
+        if let df = formatters[key] { return df }
         let df = DateFormatter()
-        df.locale = .current
-        df.dateFormat = Calendar.current.component(.minute, from: date) == 0 ? "h a" : "h:mm a"
-        return df.string(from: date)
+        df.locale = posix ? Locale(identifier: "en_US_POSIX") : .current
+        df.dateFormat = format
+        formatters[key] = df
+        return df
+    }
+
+    static func time(_ date: Date) -> String {
+        formatter(Calendar.current.component(.minute, from: date) == 0 ? "h a" : "h:mm a").string(from: date)
     }
 
     /// "Today", "Tomorrow", "Friday", "Sep 20", "Sep 20, 2027".
     static func day(_ date: Date, now: Date) -> String {
         let cal = Calendar.current
         let delta = cal.dateComponents([.day], from: cal.startOfDay(for: now), to: cal.startOfDay(for: date)).day ?? 0
-        let df = DateFormatter()
-        df.locale = .current
         switch delta {
         case 0: return "Today"
         case 1: return "Tomorrow"
         case -1: return "Yesterday"
         case 2...6:
-            df.dateFormat = "EEEE"
-            return df.string(from: date)
+            return formatter("EEEE").string(from: date)
         default:
-            df.dateFormat = cal.component(.year, from: date) == cal.component(.year, from: now) ? "MMM d" : "MMM d, yyyy"
-            return df.string(from: date)
+            let sameYear = cal.component(.year, from: date) == cal.component(.year, from: now)
+            return formatter(sameYear ? "MMM d" : "MMM d, yyyy").string(from: date)
         }
     }
 
@@ -48,10 +56,7 @@ enum Display {
     /// Absolute form for the editor field, in a format DateParse accepts back.
     static func editable(_ item: TaskItem) -> String {
         guard let due = item.due else { return "" }
-        let df = DateFormatter()
-        df.locale = Locale(identifier: "en_US_POSIX")
-        df.dateFormat = item.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm"
-        return df.string(from: due)
+        return formatter(item.isAllDay ? "yyyy-MM-dd" : "yyyy-MM-dd HH:mm", posix: true).string(from: due)
     }
 
     static func preview(_ parsed: ParsedDate?, now: Date) -> String {
