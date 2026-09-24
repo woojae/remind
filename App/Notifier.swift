@@ -102,7 +102,7 @@ final class Notifier: NSObject, ObservableObject {
     /// One category per snooze rung, so the button can say exactly how long.
     static func categories() -> [UNNotificationCategory] {
         (0..<Snooze.rungs).map { step in
-            let alt = step < 4 ? "Tomorrow morning" : "Snooze 1 hour"
+            let alt = step < Snooze.morningStep ? "Tomorrow morning" : "Snooze 1 hour"
             return UNNotificationCategory(
                 identifier: "task.\(step)",
                 actions: [
@@ -125,7 +125,7 @@ final class Notifier: NSObject, ObservableObject {
         case "snooze":
             store.snooze(item, until: options[min(step, options.count - 1)].date)
         case "alt":
-            store.snooze(item, until: options[step < 4 ? 4 : 2].date)
+            store.snooze(item, until: options[step < Snooze.morningStep ? Snooze.morningStep : 2].date)
         default:
             store.highlighted = id
             NotificationCenter.default.post(name: Self.openMainWindow, object: nil)
