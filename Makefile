@@ -14,6 +14,7 @@ APPBIN     := $(APPDIR)/Contents/MacOS/$(APP)
 APPPLIST   := App/Info.plist
 APPSOURCES := $(wildcard App/*.swift) Sources/Store.swift Sources/DateParse.swift
 APPSOURCES := $(filter-out App/mkicon.swift,$(APPSOURCES))
+FONTS      := $(wildcard App/Fonts/*.ttf)
 ICONSET    := $(BUILDDIR)/AppIcon.iconset
 ICNS       := $(BUILDDIR)/AppIcon.icns
 ARCH       := $(shell uname -m)
@@ -65,11 +66,14 @@ $(ICNS): App/mkicon.swift
 
 # UserNotifications and TCC both need a real .app bundle with a bundle id, so
 # the binary is wrapped and ad-hoc signed as a bundle.
-$(APPBIN): $(APPSOURCES) $(APPPLIST) $(ICNS)
-	@mkdir -p $(APPDIR)/Contents/MacOS $(APPDIR)/Contents/Resources
+# Fonts go in Resources/Fonts; Info.plist's ATSApplicationFontsPath registers
+# them for the app at launch.
+$(APPBIN): $(APPSOURCES) $(APPPLIST) $(ICNS) $(FONTS)
+	@mkdir -p $(APPDIR)/Contents/MacOS $(APPDIR)/Contents/Resources/Fonts
 	swiftc $(APPFLAGS) $(APPSOURCES) -o $@
 	cp $(APPPLIST) $(APPDIR)/Contents/Info.plist
 	cp $(ICNS) $(APPDIR)/Contents/Resources/AppIcon.icns
+	cp $(FONTS) $(APPDIR)/Contents/Resources/Fonts/
 	printf 'APPL????' > $(APPDIR)/Contents/PkgInfo
 	codesign --sign - --force --deep $(APPDIR)
 	@echo "built $(APPDIR)"

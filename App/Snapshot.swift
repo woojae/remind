@@ -17,6 +17,9 @@ enum Snapshot {
         await capture(SettingsView().environmentObject(store), name: "settings", to: dir)
         await capture(MainView().environmentObject(store).frame(width: 420, height: 600), name: "main", to: dir)
         await capture(QuickAddPanel().environmentObject(store), name: "quickadd", to: dir)
+        if let item = store.items.first {
+            await capture(EditorView(item: item).environmentObject(store), name: "editor", to: dir)
+        }
         exit(0)
     }
 

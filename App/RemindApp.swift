@@ -11,7 +11,13 @@ struct RemindApp: App {
         Window("Remind", id: "main") {
             MainView()
                 .environmentObject(store)
+                .toolbar { ToolbarItem(placement: .principal) { Color.clear.frame(width: 0, height: 0) } }
         }
+        // The title bar is drawn by the view. An empty unified toolbar is
+        // what makes macOS place the traffic lights in a 52pt-tall bar,
+        // centred in the theme's dark title bar (see Theme.chromeTitlebarHeight).
+        .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .defaultSize(width: 420, height: 600)
         .commands {
             CommandGroup(replacing: .newItem) {
@@ -25,8 +31,10 @@ struct RemindApp: App {
         Window("New Task", id: "quickadd") {
             QuickAddPanel()
                 .environmentObject(store)
+                .toolbar { ToolbarItem(placement: .principal) { Color.clear.frame(width: 0, height: 0) } }
         }
         .windowStyle(.hiddenTitleBar)
+        .windowToolbarStyle(.unified)
         .windowResizability(.contentSize)
         .defaultPosition(.top)
 

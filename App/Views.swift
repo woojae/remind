@@ -2,24 +2,38 @@ import AppKit
 import EventKit
 import SwiftUI
 
+// MARK: - Main window
+
+/// The main window is one of woojae.com's windows, edge to edge: a dark
+/// title bar carrying the wordmark (and the macOS traffic lights), then the
+/// white body.
 struct MainView: View {
     @EnvironmentObject var store: TaskStore
     @State private var editing: TaskItem?
 
     var body: some View {
-        VStack(spacing: 0) {
+        DesktopWindow(title: "remind",
+                      trailing: store.now.isEmpty ? nil : "\(store.now.count) due now",
+                      mark: true, titlebarHeight: Theme.chromeTitlebarHeight, floating: false) {
             QuickAddBar()
-            Divider()
+            Rule()
             if store.access == .fullAccess {
                 TaskList(editing: $editing)
             } else {
                 AccessView()
             }
-            if let undo = store.undo {
-                UndoBar(record: undo)
-            }
+            Rule()
+            StatusBar()
         }
-        .frame(minWidth: 360, idealWidth: 420, minHeight: 360, idealHeight: 600)
+        .frame(minWidth: 340, idealWidth: 420, minHeight: 380, idealHeight: 600)
+        // The hidden title bar still reserves its height as safe area;
+        // the dark bar has to run right up to the top edge.
+        .ignoresSafeArea(edges: .top)
+        .background(Theme.windowBG.ignoresSafeArea())
+        .toolbarBackground(.hidden, for: .windowToolbar)
+        .themedWindow { window in
+            window.backgroundColor = NSColor(Theme.titlebar)
+        }
         .sheet(item: $editing) { item in
             EditorView(item: item)
         }
@@ -31,6 +45,41 @@ struct MainView: View {
         } message: {
             Text(store.errorMessage ?? "")
         }
+    }
+}
+
+/// `.window-statusbar`: what's due, or the undo line right after completing.
+struct StatusBar: View {
+    @EnvironmentObject var store: TaskStore
+
+    var body: some View {
+        HStack(spacing: 8) {
+            if let undo = store.undo {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.accent)
+                Text(undo.item.isRecurring ? "Scheduled next “\(undo.item.title)”" : "Completed “\(undo.item.title)”")
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Spacer()
+                Button("Undo") { store.undoComplete() }
+                    .buttonStyle(LinkButtonStyle())
+                    .keyboardShortcut("z", modifiers: .command)
+            } else {
+                Text(summary)
+                Spacer()
+                Text("⌘N  new task")
+            }
+        }
+        .font(.system(size: 12, weight: .medium))
+        .foregroundStyle(Theme.muted)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .animation(.default, value: store.undo != nil)
+    }
+
+    private var summary: String {
+        let now = store.now.count, later = store.later.count
+        let first = now == 0 ? "Nothing due now" : "\(now) due now"
+        return later == 0 ? first : "\(first) · \(later) later"
     }
 }
 
@@ -46,13 +95,15 @@ struct QuickAddBar: View {
     private var parsed: QuickAdd.Result { QuickAdd.parse(text, now: store.clock) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Image(systemName: "plus.circle.fill")
-                    .foregroundStyle(.secondary)
-                TextField("Add a task… e.g. “Call mom tomorrow 5pm”", text: $text)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.muted)
+                TextField("Add a task… “Call mom tomorrow 5pm”", text: $text)
                     .textFieldStyle(.plain)
-                    .font(.title3)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.ink)
                     .focused($focused)
                     .onSubmit(submit)
                 Button {
@@ -60,28 +111,31 @@ struct QuickAddBar: View {
                     NSApp.sendAction(NSSelectorFromString("startDictation:"), to: nil, from: nil)
                 } label: {
                     Image(systemName: "mic.fill")
+                        .font(.system(size: 13, weight: .semibold))
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.muted)
                 .help("Dictate a task")
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).fill(Theme.field))
+
             if !text.trimmingCharacters(in: .whitespaces).isEmpty {
                 HStack(spacing: 6) {
-                    Text(parsed.title).fontWeight(.medium)
-                    Text("·").foregroundStyle(.tertiary)
+                    Text(parsed.title).foregroundStyle(Theme.ink)
+                    Text("·")
                     Image(systemName: parsed.due == nil ? "bell.fill" : "clock")
                     Text(Display.preview(parsed.due, now: store.clock))
                     Spacer()
-                    Text("Return to add").foregroundStyle(.tertiary)
+                    Text("Return to add")
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.leading, 26)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.muted)
+                .padding(.horizontal, 12)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .background(.bar)
+        .padding(16)
         .onAppear { focused = true }
         .onReceive(NotificationCenter.default.publisher(for: Notifier.openMainWindow)) { _ in
             focused = true
@@ -104,41 +158,34 @@ struct QuickAddPanel: View {
     @Environment(\.dismissWindow) private var dismissWindow
 
     var body: some View {
-        VStack(spacing: 0) {
+        DesktopWindow(title: "New Task",
+                      trailing: store.now.isEmpty ? "Nothing due now" : "\(store.now.count) due now",
+                      titlebarHeight: Theme.chromeTitlebarHeight, floating: false) {
             QuickAddBar(onAdded: { dismissWindow(id: "quickadd") })
+            Rule()
             HStack {
                 Text("Return to add · Esc to cancel")
                 Spacer()
-                Text(store.now.isEmpty ? "Nothing due now" : "\(store.now.count) due now")
             }
-            .font(.caption)
-            .foregroundStyle(.tertiary)
-            .padding(.horizontal, 14)
-            .padding(.bottom, 8)
-            .background(.bar)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.muted)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
         }
         .frame(width: 480)
+        .ignoresSafeArea(edges: .top)
+        .toolbarBackground(.hidden, for: .windowToolbar)
         .onExitCommand { dismissWindow(id: "quickadd") }
-        .background(WindowConfigurator())
-    }
-}
-
-/// Floats the panel above other windows and lets it close on Escape.
-private struct WindowConfigurator: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
+        .themedWindow { window in
             window.level = .floating
             window.isMovableByWindowBackground = true
+            window.backgroundColor = NSColor(Theme.titlebar)
             window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
             window.standardWindowButton(.miniaturizeButton)?.isHidden = true
             window.standardWindowButton(.zoomButton)?.isHidden = true
             window.makeKeyAndOrderFront(nil)
         }
-        return view
     }
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 // MARK: - List
@@ -151,53 +198,41 @@ struct TaskList: View {
         let now = store.now
         let later = store.later
         if now.isEmpty && later.isEmpty {
-            ContentUnavailableView {
-                Label("Nothing to do", systemImage: "checkmark.circle")
-            } description: {
-                Text("Add a task above, or say “Hey Siri, remind me to…” on any device.")
-            }
+            MarkHeadline(mark: "all clear.",
+                         sub: "Add a task above, or say “Hey Siri, remind me to…” on any device.")
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(28)
         } else {
-            List {
-                if !now.isEmpty {
-                    Section {
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    if !now.isEmpty {
+                        SectionLabel(title: "Now", count: now.count, tint: Theme.accent)
+                            .padding(.horizontal, 10)
+                            .padding(.bottom, 6)
                         ForEach(now) { item in
                             TaskRow(item: item, editing: $editing)
                         }
-                    } header: {
-                        SectionHeader(title: "Now", count: now.count, tint: .orange)
                     }
-                }
-                if !later.isEmpty {
-                    Section {
+                    if !later.isEmpty {
+                        SectionLabel(title: "Later", count: later.count)
+                            .padding(.horizontal, 10)
+                            .padding(.top, now.isEmpty ? 0 : 18)
+                            .padding(.bottom, 6)
                         ForEach(later) { item in
                             TaskRow(item: item, editing: $editing)
                         }
-                    } header: {
-                        SectionHeader(title: "Later", count: later.count, tint: .secondary)
                     }
                 }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 14)
+                .animation(.default, value: store.items)
             }
-            .listStyle(.inset)
-            .animation(.default, value: store.items)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
 
-struct SectionHeader: View {
-    let title: String
-    let count: Int
-    let tint: Color
-
-    var body: some View {
-        HStack {
-            Text(title).font(.headline).foregroundStyle(tint)
-            Text("\(count)").font(.caption).foregroundStyle(.secondary)
-                .padding(.horizontal, 6).padding(.vertical, 1)
-                .background(Capsule().fill(.quaternary))
-        }
-    }
-}
-
+/// `.link-row`: bold title, quieter detail line, a soft accent wash on hover.
 struct TaskRow: View {
     @EnvironmentObject var store: TaskStore
     let item: TaskItem
@@ -206,12 +241,17 @@ struct TaskRow: View {
 
     private var isNow: Bool { item.isNow(at: store.clock) }
 
+    private var rowBackground: Color {
+        if store.highlighted == item.id { return Theme.highlight }
+        return hovering ? Theme.hover : .clear
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
+        HStack(alignment: .top, spacing: 12) {
             Button { store.complete(item) } label: {
                 Image(systemName: item.isRecurring ? "arrow.trianglehead.2.clockwise.rotate.90.circle" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(isNow ? Color.orange : Color.secondary)
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(isNow ? Theme.accent : Theme.muted)
             }
             .buttonStyle(.plain)
             .help(item.isRecurring ? "Done for now — schedules the next occurrence from today" : "Mark done")
@@ -219,14 +259,16 @@ struct TaskRow: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(item.title)
-                    .font(.body)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Text(Display.when(item, now: store.clock))
-                        .foregroundStyle(isNow ? Color.orange : Color.secondary)
+                        .fontWeight(isNow ? .semibold : .regular)
+                        .foregroundStyle(isNow ? Theme.accent : Theme.body)
                     if !item.listName.isEmpty {
                         Circle()
-                            .fill(item.listColor.map(Color.init) ?? .secondary)
+                            .fill(item.listColor.map(Color.init) ?? Theme.muted)
                             .frame(width: 7, height: 7)
                         Text(item.listName)
                     }
@@ -234,10 +276,13 @@ struct TaskRow: View {
                         Text("snoozed \(item.snoozeCount)×")
                     }
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Theme.muted)
                 if let notes = item.notes {
-                    Text(notes).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                    Text(notes)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.muted)
+                        .lineLimit(1)
                 }
             }
 
@@ -247,17 +292,19 @@ struct TaskRow: View {
                 SnoozeButtons(item: item)
             } label: {
                 Image(systemName: "zzz")
+                    .foregroundStyle(Theme.muted)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .opacity(hovering || isNow ? 1 : 0.35)
+            .opacity(hovering || isNow ? 1 : 0.4)
             .help("Snooze")
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).fill(rowBackground))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .listRowBackground(store.highlighted == item.id ? Color.accentColor.opacity(0.15) : nil)
         .onTapGesture(count: 2) { editing = item }
         .contextMenu {
             Button("Done") { store.complete(item) }
@@ -310,6 +357,7 @@ struct SnoozeButtons: View {
 
 // MARK: - Editor
 
+/// A small window of its own, with the site's close dot standing in for Cancel.
 struct EditorView: View {
     @EnvironmentObject var store: TaskStore
     @Environment(\.dismiss) private var dismiss
@@ -335,76 +383,77 @@ struct EditorView: View {
     private var dueInvalid: Bool {
         !dueText.trimmingCharacters(in: .whitespaces).isEmpty && parsedDue == nil
     }
+    private var saveDisabled: Bool {
+        title.trimmingCharacters(in: .whitespaces).isEmpty || dueInvalid
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Edit Task").font(.headline)
-            Form {
-                TextField("Title", text: $title)
-                VStack(alignment: .leading, spacing: 3) {
-                    TextField("When", text: $dueText, prompt: Text("now, tomorrow 9am, friday, +3d…"))
-                    Text(dueInvalid ? "Couldn't understand that date." : Display.preview(parsedDue, now: store.clock))
-                        .font(.caption)
-                        .foregroundStyle(dueInvalid ? Color.red : Color.secondary)
+        DesktopWindow(title: "Edit Task", onClose: { dismiss() }, floating: false) {
+            VStack(alignment: .leading, spacing: 16) {
+                FieldBox(label: "Title") {
+                    TextField("Title", text: $title)
                 }
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Notes").font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $notes)
-                        .font(.body)
-                        .frame(minHeight: 70, maxHeight: 140)
-                        .overlay(RoundedRectangle(cornerRadius: 5).stroke(.quaternary))
-                }
-                Picker("List", selection: $listID) {
-                    ForEach(store.lists, id: \.calendarIdentifier) { list in
-                        Text(list.title).tag(list.calendarIdentifier)
+                VStack(alignment: .leading, spacing: 6) {
+                    FieldBox(label: "When") {
+                        TextField("When", text: $dueText, prompt: Text("now, tomorrow 9am, friday, +3d…"))
                     }
+                    Text(dueInvalid ? "Couldn't understand that date." : Display.preview(parsedDue, now: store.clock))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(dueInvalid ? Theme.danger : Theme.muted)
+                        .padding(.leading, 2)
+                }
+                FieldBox(label: "Notes") {
+                    TextEditor(text: $notes)
+                        .scrollContentBackground(.hidden)
+                        .frame(minHeight: 64, maxHeight: 130)
+                        .padding(.horizontal, -5)
+                }
+                HStack {
+                    Text("LIST")
+                        .font(.system(size: 11, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(Theme.muted)
+                    Spacer()
+                    Picker("List", selection: $listID) {
+                        ForEach(store.lists, id: \.calendarIdentifier) { list in
+                            Text(list.title).tag(list.calendarIdentifier)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 220)
                 }
                 if item.isRecurring {
                     Text("Repeats. Completing it schedules the next occurrence from today.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.body)
                 }
+                HStack(spacing: 10) {
+                    Button("Delete") {
+                        store.delete(item)
+                        dismiss()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.danger)
+                    Spacer()
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(PillButtonStyle())
+                        .keyboardShortcut(.cancelAction)
+                    Button("Save") {
+                        store.update(item, title: title, due: parsedDue, notes: notes, listID: listID)
+                        dismiss()
+                    }
+                    .buttonStyle(PillButtonStyle(kind: .primary))
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(saveDisabled)
+                    .opacity(saveDisabled ? 0.45 : 1)
+                }
+                .padding(.top, 4)
             }
-            .formStyle(.columns)
-            HStack {
-                Button("Delete", role: .destructive) {
-                    store.delete(item)
-                    dismiss()
-                }
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("Save") {
-                    store.update(item, title: title, due: parsedDue, notes: notes, listID: listID)
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || dueInvalid)
-            }
+            .padding(24)
         }
-        .padding(20)
-        .frame(width: 420)
-    }
-}
-
-// MARK: - Undo
-
-struct UndoBar: View {
-    @EnvironmentObject var store: TaskStore
-    let record: TaskStore.UndoRecord
-
-    var body: some View {
-        HStack {
-            Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-            Text(record.item.isRecurring ? "Scheduled next “\(record.item.title)”" : "Completed “\(record.item.title)”")
-                .lineLimit(1)
-            Spacer()
-            Button("Undo") { store.undoComplete() }
-                .keyboardShortcut("z", modifiers: .command)
-        }
-        .font(.callout)
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(.bar)
-        .transition(.move(edge: .bottom).combined(with: .opacity))
+        .frame(width: 440)
+        .themedWindow()
     }
 }
 
@@ -414,17 +463,21 @@ struct AccessView: View {
     @EnvironmentObject var store: TaskStore
 
     var body: some View {
-        ContentUnavailableView {
-            Label("Reminders access needed", systemImage: "lock.circle")
-        } description: {
-            Text("Remind reads and edits your Apple Reminders. Status: \(Auth.name(store.access)).")
-        } actions: {
-            Button("Request Access") { Task { await store.retryAccess() } }
-            Button("Open System Settings") {
-                if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders") {
-                    NSWorkspace.shared.open(url)
+        VStack(spacing: 22) {
+            MarkHeadline(mark: "hello.",
+                         sub: "Remind reads and edits your Apple Reminders.\nStatus: \(Auth.name(store.access)).")
+            HStack(spacing: 10) {
+                Button("Request Access") { Task { await store.retryAccess() } }
+                    .buttonStyle(PillButtonStyle(kind: .primary))
+                Button("System Settings") {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders") {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
+                .buttonStyle(PillButtonStyle())
             }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(28)
     }
 }
