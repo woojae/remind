@@ -1,36 +1,54 @@
-// Renders the app icon: a rounded orange tile with a bell. Run by `make`:
+// Renders the app icon: the site's logo badge — a white tile, tilted a few
+// degrees, with a bell drawn on it — sitting on the sky-blue desktop. Run by
+// `make`:
 //   swift App/mkicon.swift <output.iconset dir>
 import AppKit
 
 let outDir = CommandLine.arguments.dropFirst().first ?? "AppIcon.iconset"
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
+let desktop = NSColor(srgbRed: 0x6b / 255, green: 0x9b / 255, blue: 0xd2 / 255, alpha: 1)
+let ink = NSColor(srgbRed: 0x13 / 255, green: 0x14 / 255, blue: 0x17 / 255, alpha: 1)
+
 func render(_ px: Int) -> Data? {
-    let size = NSSize(width: px, height: px)
+    let p = CGFloat(px)
+    let size = NSSize(width: p, height: p)
     let image = NSImage(size: size)
     image.lockFocus()
     guard let ctx = NSGraphicsContext.current?.cgContext else { return nil }
-    let rect = NSRect(origin: .zero, size: size).insetBy(dx: CGFloat(px) * 0.06, dy: CGFloat(px) * 0.06)
-    let path = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.22, yRadius: rect.width * 0.22)
-    path.addClip()
-    let gradient = NSGradient(starting: NSColor(calibratedRed: 1.0, green: 0.62, blue: 0.20, alpha: 1),
-                              ending: NSColor(calibratedRed: 0.93, green: 0.36, blue: 0.10, alpha: 1))!
-    gradient.draw(in: rect, angle: -90)
-    ctx.resetClip()
 
-    let config = NSImage.SymbolConfiguration(pointSize: CGFloat(px) * 0.52, weight: .semibold)
-    if let symbol = NSImage(systemSymbolName: "bell.badge.fill", accessibilityDescription: nil)?
+    // Desktop: the standard macOS rounded-square footprint.
+    let rect = NSRect(origin: .zero, size: size).insetBy(dx: p * 0.06, dy: p * 0.06)
+    let plate = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.22, yRadius: rect.width * 0.22)
+    desktop.setFill()
+    plate.fill()
+
+    // Badge: white tile rotated -4°, with a soft drop shadow.
+    ctx.saveGState()
+    ctx.translateBy(x: p / 2, y: p / 2)
+    ctx.rotate(by: -4 * .pi / 180)
+    let tile = p * 0.56
+    let tileRect = NSRect(x: -tile / 2, y: -tile / 2, width: tile, height: tile)
+    ctx.setShadow(offset: CGSize(width: 0, height: -p * 0.025), blur: p * 0.06,
+                  color: NSColor.black.withAlphaComponent(0.28).cgColor)
+    NSColor.white.setFill()
+    NSBezierPath(roundedRect: tileRect, xRadius: tile * 0.28, yRadius: tile * 0.28).fill()
+    ctx.setShadow(offset: .zero, blur: 0, color: nil)
+
+    let config = NSImage.SymbolConfiguration(pointSize: p * 0.30, weight: .semibold)
+    if let symbol = NSImage(systemSymbolName: "bell", accessibilityDescription: nil)?
         .withSymbolConfiguration(config) {
         let tinted = NSImage(size: symbol.size, flipped: false) { r in
             symbol.draw(in: r)
-            NSColor.white.set()
+            ink.set()
             r.fill(using: .sourceAtop)
             return true
         }
         let s = tinted.size
-        let origin = NSPoint(x: (size.width - s.width) / 2, y: (size.height - s.height) / 2)
-        tinted.draw(at: origin, from: .zero, operation: .sourceOver, fraction: 1)
+        tinted.draw(at: NSPoint(x: -s.width / 2, y: -s.height / 2), from: .zero, operation: .sourceOver, fraction: 1)
     }
+    ctx.restoreGState()
+
     image.unlockFocus()
     guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
     rep.size = size

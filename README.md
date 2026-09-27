@@ -45,6 +45,12 @@ reminders for people who forget reminders.
   now. The mic button starts macOS dictation.
 - **Menu bar item** shows how many tasks are due now, with Done/Snooze for
   each. Closing the window keeps the app (and the nagging) running.
+- **Looks like [woojae.com](https://www.woojae.com).** One of the site's
+  windows, edge to edge: a dark title bar with the marker-pen wordmark, then
+  a white body. The theme is light-only, like the site, so the windows stay
+  light in Dark Mode. The palette lives in `App/Theme.swift`; the wordmark is
+  [Permanent Marker](https://fonts.google.com/specimen/Permanent+Marker)
+  (Apache 2.0), bundled from `App/Fonts/`.
 
 ### Build and run
 
@@ -168,6 +174,7 @@ The app in `App/` reuses `Store.swift` and `DateParse.swift` and adds:
 - `Snooze.swift` — the snooze ladder and the on-disk nag state
 - `QuickAdd.swift` — pulls a due date out of a typed sentence
 - `Views.swift`, `SettingsView.swift`, `Display.swift` — SwiftUI
+- `Theme.swift` — palette, window chrome, and control styles
 - `mkicon.swift` — renders the app icon at build time
 
 Two macOS details the `Makefile` handles, both of which break the binary if
