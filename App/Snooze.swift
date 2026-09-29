@@ -15,9 +15,13 @@ enum Snooze {
     /// Short titles used in notification action buttons, one per rung.
     static let actionTitles = [
         "Snooze 10 min", "Snooze 30 min", "Snooze 1 hour", "Snooze 3 hours",
+        "Snooze 6 hours", "Snooze 9 hours",
         "Snooze until tomorrow", "Snooze 3 days", "Snooze a week",
     ]
     static var rungs: Int { actionTitles.count }
+    /// The rung that lands on the next morning; everything before it is a
+    /// same-day offset from now.
+    static let morningStep = 6
 
     static func suggestedStep(snoozeCount: Int) -> Int {
         min(max(snoozeCount, 0), rungs - 1)
@@ -36,9 +40,11 @@ enum Snooze {
             SnoozeOption(step: 1, label: "30 minutes", date: now.addingTimeInterval(30 * 60)),
             SnoozeOption(step: 2, label: "1 hour", date: now.addingTimeInterval(60 * 60)),
             SnoozeOption(step: 3, label: "3 hours", date: now.addingTimeInterval(3 * 60 * 60)),
-            SnoozeOption(step: 4, label: isToday ? "This morning" : "Tomorrow morning", date: morning),
-            SnoozeOption(step: 5, label: "In 3 days", date: plusMorning(days: 3)),
-            SnoozeOption(step: 6, label: "Next week", date: plusMorning(days: 7)),
+            SnoozeOption(step: 4, label: "6 hours", date: now.addingTimeInterval(6 * 60 * 60)),
+            SnoozeOption(step: 5, label: "9 hours", date: now.addingTimeInterval(9 * 60 * 60)),
+            SnoozeOption(step: morningStep, label: isToday ? "This morning" : "Tomorrow morning", date: morning),
+            SnoozeOption(step: 7, label: "In 3 days", date: plusMorning(days: 3)),
+            SnoozeOption(step: 8, label: "Next week", date: plusMorning(days: 7)),
         ]
     }
 
