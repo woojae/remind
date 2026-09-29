@@ -31,8 +31,8 @@ reminders for people who forget reminders.
   minutes) until the task is completed, snoozed, or deleted. Several due
   tasks are spaced out rather than dumped on you at once, and quiet hours
   (default 10 PM–8 AM) hold everything until morning.
-- **Snooze scales.** The ladder is 10 min → 30 min → 1 h → 3 h → tomorrow
-  morning → 3 days → a week. Every option shows the actual time it lands on,
+- **Snooze scales.** The ladder is 10 min → 30 min → 1 h → 3 h → 6 h → 9 h →
+  tomorrow morning → 3 days → a week. Every option shows the actual time it lands on,
   and the suggested rung climbs each time you snooze the same task.
 - **Recurring tasks don't pile up.** Completing a repeating task you missed
   schedules the next occurrence from *now*, not from the date you skipped.
