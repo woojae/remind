@@ -78,6 +78,7 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 460, height: 620)
+        .themedWindow()
         .onAppear { notifier.refreshAuthorization() }
         .onChange(of: excludedRaw) { _, _ in Task { await store.refresh() } }
     }
