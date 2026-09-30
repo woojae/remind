@@ -4,16 +4,16 @@ import SwiftUI
 
 // MARK: - Main window
 
-/// The main window is one of woojae.com's windows, edge to edge: a dark
-/// title bar carrying the wordmark (and the macOS traffic lights), then the
-/// white body.
+/// The main window is a single black panel, edge to edge: a ruled title bar
+/// carrying the dot-matrix wordmark (and the macOS traffic lights), then the
+/// gridded body.
 struct MainView: View {
     @EnvironmentObject var store: TaskStore
     @State private var editing: TaskItem?
 
     var body: some View {
         DesktopWindow(title: "remind",
-                      trailing: store.now.isEmpty ? nil : "\(store.now.count) due now",
+                      trailing: store.now.isEmpty ? nil : "\(Theme.readout(store.now.count)) due",
                       mark: true, titlebarHeight: Theme.chromeTitlebarHeight, floating: false) {
             QuickAddBar()
             Rule()
@@ -55,7 +55,7 @@ struct StatusBar: View {
     var body: some View {
         HStack(spacing: 8) {
             if let undo = store.undo {
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.accent)
+                Text("OK").foregroundStyle(Theme.signal)
                 Text(undo.item.isRecurring ? "Scheduled next “\(undo.item.title)”" : "Completed “\(undo.item.title)”")
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
@@ -64,12 +64,15 @@ struct StatusBar: View {
                     .buttonStyle(LinkButtonStyle())
                     .keyboardShortcut("z", modifiers: .command)
             } else {
+                Cursor(color: store.now.isEmpty ? Theme.muted : Theme.accent)
                 Text(summary)
                 Spacer()
-                Text("⌘N  new task")
+                Text("⌘N NEW")
             }
         }
-        .font(.system(size: 12, weight: .medium))
+        .font(Theme.mono(11, .medium))
+        .tracking(Theme.labelTracking)
+        .textCase(.uppercase)
         .foregroundStyle(Theme.muted)
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -78,8 +81,8 @@ struct StatusBar: View {
 
     private var summary: String {
         let now = store.now.count, later = store.later.count
-        let first = now == 0 ? "Nothing due now" : "\(now) due now"
-        return later == 0 ? first : "\(first) · \(later) later"
+        let first = now == 0 ? "Nothing due" : "\(Theme.readout(now)) due"
+        return later == 0 ? first : "\(first) :: \(Theme.readout(later)) later"
     }
 }
 
@@ -95,14 +98,16 @@ struct QuickAddBar: View {
     private var parsed: QuickAdd.Result { QuickAdd.parse(text, now: store.clock) }
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 10) {
-                Image(systemName: "plus")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.muted)
-                TextField("Add a task… “Call mom tomorrow 5pm”", text: $text)
+                Text(">")
+                    .font(Theme.mono(14, .bold))
+                    .foregroundStyle(focused ? Theme.accent : Theme.muted)
+                TextField("", text: $text,
+                          prompt: Text("add task… \"call mom tomorrow 5pm\"").foregroundStyle(Theme.muted))
                     .textFieldStyle(.plain)
-                    .font(.system(size: 15))
+                    .font(Theme.mono(13.5))
                     .foregroundStyle(Theme.ink)
                     .focused($focused)
                     .onSubmit(submit)
@@ -110,7 +115,7 @@ struct QuickAddBar: View {
                     focused = true
                     NSApp.sendAction(NSSelectorFromString("startDictation:"), to: nil, from: nil)
                 } label: {
-                    Image(systemName: "mic.fill")
+                    Image(systemName: "waveform")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 .buttonStyle(.plain)
@@ -119,18 +124,23 @@ struct QuickAddBar: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).fill(Theme.field))
+            .background(shape.fill(Theme.panel))
+            .overlay(shape.stroke(focused ? Theme.accent.opacity(0.6) : Theme.border, lineWidth: 1))
+            .animation(.easeOut(duration: 0.15), value: focused)
 
             if !text.trimmingCharacters(in: .whitespaces).isEmpty {
-                HStack(spacing: 6) {
-                    Text(parsed.title).foregroundStyle(Theme.ink)
-                    Text("·")
-                    Image(systemName: parsed.due == nil ? "bell.fill" : "clock")
+                HStack(spacing: 8) {
+                    Text("->").foregroundStyle(Theme.accent)
+                    Text(parsed.title).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text("::").foregroundStyle(Theme.border)
                     Text(Display.preview(parsed.due, now: store.clock))
+                        .foregroundStyle(parsed.due == nil ? Theme.muted : Theme.accent)
                     Spacer()
-                    Text("Return to add")
+                    Text("RET")
                 }
-                .font(.system(size: 12, weight: .semibold))
+                .font(Theme.mono(11, .medium))
+                .tracking(Theme.labelTracking)
+                .textCase(.uppercase)
                 .foregroundStyle(Theme.muted)
                 .padding(.horizontal, 12)
             }
@@ -159,15 +169,17 @@ struct QuickAddPanel: View {
 
     var body: some View {
         DesktopWindow(title: "New Task",
-                      trailing: store.now.isEmpty ? "Nothing due now" : "\(store.now.count) due now",
+                      trailing: store.now.isEmpty ? "Nothing due" : "\(Theme.readout(store.now.count)) due",
                       titlebarHeight: Theme.chromeTitlebarHeight, floating: false) {
             QuickAddBar(onAdded: { dismissWindow(id: "quickadd") })
             Rule()
             HStack {
-                Text("Return to add · Esc to cancel")
+                Text("RET add :: ESC cancel")
                 Spacer()
             }
-            .font(.system(size: 12, weight: .medium))
+            .font(Theme.mono(11, .medium))
+            .tracking(Theme.labelTracking)
+            .textCase(.uppercase)
             .foregroundStyle(Theme.muted)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
@@ -198,8 +210,8 @@ struct TaskList: View {
         let now = store.now
         let later = store.later
         if now.isEmpty && later.isEmpty {
-            MarkHeadline(mark: "all clear.",
-                         sub: "Add a task above, or say “Hey Siri, remind me to…” on any device.")
+            MarkHeadline(mark: "all clear",
+                         sub: "No signals. Add a task above, or say “Hey Siri, remind me to…” on any device.")
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .padding(28)
         } else {
@@ -208,16 +220,16 @@ struct TaskList: View {
                     if !now.isEmpty {
                         SectionLabel(title: "Now", count: now.count, tint: Theme.accent)
                             .padding(.horizontal, 10)
-                            .padding(.bottom, 6)
+                            .padding(.bottom, 8)
                         ForEach(now) { item in
                             TaskRow(item: item, editing: $editing)
                         }
                     }
                     if !later.isEmpty {
-                        SectionLabel(title: "Later", count: later.count)
+                        SectionLabel(title: "Later", count: later.count, tint: Theme.body)
                             .padding(.horizontal, 10)
-                            .padding(.top, now.isEmpty ? 0 : 18)
-                            .padding(.bottom, 6)
+                            .padding(.top, now.isEmpty ? 0 : 22)
+                            .padding(.bottom, 8)
                         ForEach(later) { item in
                             TaskRow(item: item, editing: $editing)
                         }
@@ -232,7 +244,8 @@ struct TaskList: View {
     }
 }
 
-/// `.link-row`: bold title, quieter detail line, a soft accent wash on hover.
+/// One line of the readout: a square checkbox, mono title, then a
+/// letterspaced telemetry line. Due-now rows get an accent bar down the side.
 struct TaskRow: View {
     @EnvironmentObject var store: TaskStore
     let item: TaskItem
@@ -247,51 +260,70 @@ struct TaskRow: View {
     }
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
         HStack(alignment: .top, spacing: 12) {
             Button { store.complete(item) } label: {
-                Image(systemName: item.isRecurring ? "arrow.trianglehead.2.clockwise.rotate.90.circle" : "circle")
-                    .font(.system(size: 19, weight: .medium))
+                Image(systemName: item.isRecurring ? "arrow.trianglehead.2.clockwise.rotate.90" : "square")
+                    .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(isNow ? Theme.accent : Theme.muted)
+                    .frame(width: 18, height: 18)
             }
             .buttonStyle(.plain)
             .help(item.isRecurring ? "Done for now — schedules the next occurrence from today" : "Mark done")
             .padding(.top, 1)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(item.title)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(Theme.mono(13, .medium))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(2)
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Text(Display.when(item, now: store.clock))
-                        .fontWeight(isNow ? .semibold : .regular)
                         .foregroundStyle(isNow ? Theme.accent : Theme.body)
+                        .fixedSize()
+                        .layoutPriority(2)
                     if !item.listName.isEmpty {
-                        Circle()
+                        Text("::").foregroundStyle(Theme.border)
+                        Rectangle()
                             .fill(item.listColor.map(Color.init) ?? Theme.muted)
-                            .frame(width: 7, height: 7)
-                        Text(item.listName)
+                            .frame(width: 6, height: 6)
+                        Text(item.listName).truncationMode(.tail)
                     }
                     if item.snoozeCount > 0 {
-                        Text("snoozed \(item.snoozeCount)×")
+                        Text("::").foregroundStyle(Theme.border)
+                        Text("SNZ×\(item.snoozeCount)")
+                            .fixedSize()
+                            .layoutPriority(1)
                     }
                 }
-                .font(.system(size: 12.5))
+                .lineLimit(1)
+                .font(Theme.mono(10.5, .medium))
+                .tracking(1.2)
+                .textCase(.uppercase)
                 .foregroundStyle(Theme.muted)
                 if let notes = item.notes {
                     Text(notes)
-                        .font(.system(size: 12))
+                        .font(Theme.mono(11))
                         .foregroundStyle(Theme.muted)
                         .lineLimit(1)
                 }
             }
-
-            Spacer(minLength: 4)
-
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.trailing, 32)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(shape.fill(rowBackground))
+        .overlay(alignment: .leading) {
+            Rectangle().fill(Theme.accent).frame(width: 2).opacity(isNow ? 1 : 0)
+        }
+        .overlay(alignment: .topTrailing) {
             Menu {
                 SnoozeButtons(item: item)
             } label: {
-                Image(systemName: "zzz")
+                Text("ZZ")
+                    .font(Theme.mono(10.5, .bold))
+                    .tracking(1)
                     .foregroundStyle(Theme.muted)
             }
             .menuStyle(.borderlessButton)
@@ -299,10 +331,9 @@ struct TaskRow: View {
             .fixedSize()
             .opacity(hovering || isNow ? 1 : 0.4)
             .help("Snooze")
+            .padding(.top, 11)
+            .padding(.trailing, 10)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).fill(rowBackground))
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { editing = item }
@@ -397,9 +428,11 @@ struct EditorView: View {
                     FieldBox(label: "When") {
                         TextField("When", text: $dueText, prompt: Text("now, tomorrow 9am, friday, +3d…"))
                     }
-                    Text(dueInvalid ? "Couldn't understand that date." : Display.preview(parsedDue, now: store.clock))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(dueInvalid ? Theme.danger : Theme.muted)
+                    Text(dueInvalid ? "ERR :: couldn't parse that date" : "-> \(Display.preview(parsedDue, now: store.clock))")
+                        .font(Theme.mono(11, .medium))
+                        .tracking(1.2)
+                        .textCase(.uppercase)
+                        .foregroundStyle(dueInvalid ? Theme.danger : Theme.accent)
                         .padding(.leading, 2)
                 }
                 FieldBox(label: "Notes") {
@@ -409,10 +442,13 @@ struct EditorView: View {
                         .padding(.horizontal, -5)
                 }
                 HStack {
-                    Text("LIST")
-                        .font(.system(size: 11, weight: .bold))
-                        .tracking(0.8)
-                        .foregroundStyle(Theme.muted)
+                    HStack(spacing: 6) {
+                        Text("LIST")
+                        Text("::").foregroundStyle(Theme.border)
+                    }
+                    .font(Theme.mono(10.5, .bold))
+                    .tracking(Theme.labelTracking)
+                    .foregroundStyle(Theme.muted)
                     Spacer()
                     Picker("List", selection: $listID) {
                         ForEach(store.lists, id: \.calendarIdentifier) { list in
@@ -424,7 +460,7 @@ struct EditorView: View {
                 }
                 if item.isRecurring {
                     Text("Repeats. Completing it schedules the next occurrence from today.")
-                        .font(.system(size: 12))
+                        .font(Theme.mono(11.5))
                         .foregroundStyle(Theme.body)
                 }
                 HStack(spacing: 10) {
@@ -433,7 +469,9 @@ struct EditorView: View {
                         dismiss()
                     }
                     .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(Theme.mono(11.5, .bold))
+                    .tracking(Theme.labelTracking)
+                    .textCase(.uppercase)
                     .foregroundStyle(Theme.danger)
                     Spacer()
                     Button("Cancel") { dismiss() }

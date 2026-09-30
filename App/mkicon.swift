@@ -1,14 +1,17 @@
-// Renders the app icon: the site's logo badge — a white tile, tilted a few
-// degrees, with a bell drawn on it — sitting on the sky-blue desktop. Run by
-// `make`:
+// Renders the app icon to match the control-room theme: a near-black tile
+// with a faint grid, reticle corners, an off-white bell and a hot-pink
+// status dot. Run by `make`:
 //   swift App/mkicon.swift <output.iconset dir>
 import AppKit
 
 let outDir = CommandLine.arguments.dropFirst().first ?? "AppIcon.iconset"
 try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
 
-let desktop = NSColor(srgbRed: 0x6b / 255, green: 0x9b / 255, blue: 0xd2 / 255, alpha: 1)
-let ink = NSColor(srgbRed: 0x13 / 255, green: 0x14 / 255, blue: 0x17 / 255, alpha: 1)
+let plateColor = NSColor(srgbRed: 0x0a / 255, green: 0x0a / 255, blue: 0x0c / 255, alpha: 1)
+let ink = NSColor(srgbRed: 0xe8 / 255, green: 0xe6 / 255, blue: 0xdd / 255, alpha: 1)
+let accent = NSColor(srgbRed: 0xff / 255, green: 0x2e / 255, blue: 0x63 / 255, alpha: 1)
+let gridColor = NSColor.white.withAlphaComponent(0.07)
+let borderColor = NSColor.white.withAlphaComponent(0.16)
 
 func render(_ px: Int) -> Data? {
     let p = CGFloat(px)
@@ -17,25 +20,56 @@ func render(_ px: Int) -> Data? {
     image.lockFocus()
     guard let ctx = NSGraphicsContext.current?.cgContext else { return nil }
 
-    // Desktop: the standard macOS rounded-square footprint.
+    // Plate: the standard macOS rounded-square footprint.
     let rect = NSRect(origin: .zero, size: size).insetBy(dx: p * 0.06, dy: p * 0.06)
     let plate = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.22, yRadius: rect.width * 0.22)
-    desktop.setFill()
+    plateColor.setFill()
     plate.fill()
 
-    // Badge: white tile rotated -4°, with a soft drop shadow.
+    // Grid, clipped to the plate.
     ctx.saveGState()
-    ctx.translateBy(x: p / 2, y: p / 2)
-    ctx.rotate(by: -4 * .pi / 180)
-    let tile = p * 0.56
-    let tileRect = NSRect(x: -tile / 2, y: -tile / 2, width: tile, height: tile)
-    ctx.setShadow(offset: CGSize(width: 0, height: -p * 0.025), blur: p * 0.06,
-                  color: NSColor.black.withAlphaComponent(0.28).cgColor)
-    NSColor.white.setFill()
-    NSBezierPath(roundedRect: tileRect, xRadius: tile * 0.28, yRadius: tile * 0.28).fill()
-    ctx.setShadow(offset: .zero, blur: 0, color: nil)
+    plate.addClip()
+    let step = max(p * 0.085, 4)
+    let hair = max(p / 512, 0.5)
+    gridColor.setStroke()
+    var x = rect.minX
+    while x <= rect.maxX {
+        let line = NSBezierPath()
+        line.move(to: NSPoint(x: x, y: rect.minY)); line.line(to: NSPoint(x: x, y: rect.maxY))
+        line.lineWidth = hair; line.stroke()
+        x += step
+    }
+    var y = rect.minY
+    while y <= rect.maxY {
+        let line = NSBezierPath()
+        line.move(to: NSPoint(x: rect.minX, y: y)); line.line(to: NSPoint(x: rect.maxX, y: y))
+        line.lineWidth = hair; line.stroke()
+        y += step
+    }
+    ctx.restoreGState()
 
-    let config = NSImage.SymbolConfiguration(pointSize: p * 0.30, weight: .semibold)
+    // Thin border and reticle corners.
+    if px >= 32 {
+        borderColor.setStroke()
+        plate.lineWidth = max(p / 256, 1)
+        plate.stroke()
+
+        let inset = rect.insetBy(dx: p * 0.16, dy: p * 0.16)
+        let arm = p * 0.07
+        let corners = NSBezierPath()
+        corners.lineWidth = max(p / 200, 1)
+        for (cx, cy, sx, sy) in [(inset.minX, inset.minY, 1.0, 1.0), (inset.maxX, inset.minY, -1.0, 1.0),
+                                 (inset.minX, inset.maxY, 1.0, -1.0), (inset.maxX, inset.maxY, -1.0, -1.0)] {
+            corners.move(to: NSPoint(x: cx, y: cy + arm * sy))
+            corners.line(to: NSPoint(x: cx, y: cy))
+            corners.line(to: NSPoint(x: cx + arm * sx, y: cy))
+        }
+        ink.withAlphaComponent(0.55).setStroke()
+        corners.stroke()
+    }
+
+    // Bell.
+    let config = NSImage.SymbolConfiguration(pointSize: p * 0.34, weight: .medium)
     if let symbol = NSImage(systemSymbolName: "bell", accessibilityDescription: nil)?
         .withSymbolConfiguration(config) {
         let tinted = NSImage(size: symbol.size, flipped: false) { r in
@@ -45,8 +79,17 @@ func render(_ px: Int) -> Data? {
             return true
         }
         let s = tinted.size
-        tinted.draw(at: NSPoint(x: -s.width / 2, y: -s.height / 2), from: .zero, operation: .sourceOver, fraction: 1)
+        tinted.draw(at: NSPoint(x: p / 2 - s.width / 2, y: p / 2 - s.height / 2),
+                    from: .zero, operation: .sourceOver, fraction: 1)
     }
+
+    // Status dot, top right of the bell, with a soft glow.
+    let dot = p * 0.09
+    let dotRect = NSRect(x: p * 0.61, y: p * 0.61, width: dot, height: dot)
+    ctx.saveGState()
+    ctx.setShadow(offset: .zero, blur: p * 0.04, color: accent.withAlphaComponent(0.9).cgColor)
+    accent.setFill()
+    NSBezierPath(rect: dotRect).fill()
     ctx.restoreGState()
 
     image.unlockFocus()

@@ -45,12 +45,14 @@ reminders for people who forget reminders.
   now. The mic button starts macOS dictation.
 - **Menu bar item** shows how many tasks are due now, with Done/Snooze for
   each. Closing the window keeps the app (and the nagging) running.
-- **Looks like [woojae.com](https://www.woojae.com).** One of the site's
-  windows, edge to edge: a dark title bar with the marker-pen wordmark, then
-  a white body. The theme is light-only, like the site, so the windows stay
-  light in Dark Mode. The palette lives in `App/Theme.swift`; the wordmark is
-  [Permanent Marker](https://fonts.google.com/specimen/Permanent+Marker)
-  (Apache 2.0), bundled from `App/Fonts/`.
+- **Looks like a control room.** A near-black terminal with a faint
+  engineering grid behind it, dot-matrix headlines and counters, monospace
+  copy, square corners, and one hot pink accent for whatever is due right
+  now. The theme is dark-only, so the windows stay dark in Light Mode. The
+  palette lives in `App/Theme.swift`; the wordmark and readouts are set in
+  [Doto](https://fonts.google.com/specimen/Doto) and the body in
+  [JetBrains Mono](https://fonts.google.com/specimen/JetBrains+Mono) (both
+  OFL), bundled from `App/Fonts/`.
 
 ### Build and run
 

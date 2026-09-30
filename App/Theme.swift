@@ -1,37 +1,65 @@
 import AppKit
 import SwiftUI
 
-/// The look of woojae.com, brought to the Mac: white windows with dark title
-/// bars and a marker-pen wordmark. (The site's sky-blue desktop survives only
-/// in the app icon; on a Mac the real desktop is behind the window already.)
+/// Control-room Remind: a near-black terminal with a faint grid behind it,
+/// dot-matrix headlines, monospace copy and one hot accent for whatever is
+/// due right now. Think classified telemetry, not a to-do list.
 /// Every colour the app paints comes from here so the palette stays in one place.
 enum Theme {
-    static let ink        = Color(hex: 0x131417)
-    static let body       = Color(hex: 0x55585f)   // secondary copy inside a window
-    static let muted      = Color(hex: 0x82868f)
-    static let windowBG   = Color.white
-    static let titlebar   = Color(hex: 0x1b1b1e)
-    static let accent     = Color(hex: 0x2f6cb0)
-    static let field      = Color(hex: 0xf2f3f5)   // inputs and quiet buttons
-    static let rule       = Color(hex: 0xececec)
-    static let danger     = Color(hex: 0xe5484d)
-    static let hover      = accent.opacity(0.10)
-    static let highlight  = accent.opacity(0.16)
+    static let ink        = Color(hex: 0xe8e6dd)   // phosphor off-white
+    static let body       = Color(hex: 0x9c9b93)   // secondary copy
+    static let muted      = Color(hex: 0x5e5f66)
+    static let windowBG   = Color(hex: 0x0a0a0c)
+    static let titlebar   = Color(hex: 0x0a0a0c)
+    static let panel      = Color(hex: 0x121215)   // inputs and quiet buttons
+    static let accent     = Color(hex: 0xff2e63)   // the "Kp-05" hot pink
+    static let signal     = Color(hex: 0x74f0c8)   // confirmations
+    static let rule       = Color(hex: 0x1f1f24)
+    static let border     = Color(hex: 0x2a2a30)
+    static let grid       = Color.white.opacity(0.045)
+    static let danger     = Color(hex: 0xff5a3c)
+    static let hover      = Color.white.opacity(0.035)
+    static let highlight  = accent.opacity(0.14)
 
-    static let windowRadius: CGFloat = 16
-    static let titlebarHeight: CGFloat = 46
+    static let windowRadius: CGFloat = 4
+    static let titlebarHeight: CGFloat = 44
     /// Windows that carry the macOS traffic lights use a taller bar: with a
     /// hidden title bar and a unified toolbar the lights sit 26pt from the
     /// top, so 52pt centres them.
     static let chromeTitlebarHeight: CGFloat = 52
-    static let controlRadius: CGFloat = 10
+    static let controlRadius: CGFloat = 2
+    static let gridStep: CGFloat = 22
 
-    /// Permanent Marker, bundled in Resources/Fonts; Marker Felt if it failed
-    /// to register for some reason.
-    static func mark(_ size: CGFloat) -> Font {
-        NSFont(name: "Permanent Marker", size: size) != nil
-            ? .custom("Permanent Marker", size: size)
-            : .custom("Marker Felt", size: size)
+    enum Weight { case regular, medium, bold }
+
+    /// JetBrains Mono, bundled in Resources/Fonts; the system monospace if
+    /// it failed to register for some reason.
+    static func mono(_ size: CGFloat, _ weight: Weight = .regular) -> Font {
+        let name: String
+        switch weight {
+        case .regular: name = "JetBrainsMono-Regular"
+        case .medium:  name = "JetBrainsMonoRoman-Medium"
+        case .bold:    name = "JetBrainsMonoRoman-Bold"
+        }
+        if NSFont(name: name, size: size) != nil { return .custom(name, size: size) }
+        let w: Font.Weight = weight == .regular ? .regular : weight == .medium ? .medium : .bold
+        return .system(size: size, weight: w, design: .monospaced)
+    }
+
+    /// Doto, the dot-matrix display face used for the wordmark, headlines
+    /// and counters. Falls back to bold system monospace.
+    static func dot(_ size: CGFloat) -> Font {
+        NSFont(name: "Doto-Black_Bold", size: size) != nil
+            ? .custom("Doto-Black_Bold", size: size)
+            : .system(size: size, weight: .black, design: .monospaced)
+    }
+
+    /// Small caps-ish label: mono, uppercase, letterspaced.
+    static let labelTracking: CGFloat = 1.6
+
+    /// Two-digit readouts, the way a panel would show them: 03, 12, 99+.
+    static func readout(_ n: Int) -> String {
+        n > 99 ? "99+" : String(format: "%02d", n)
     }
 }
 
@@ -45,14 +73,66 @@ extension Color {
     }
 }
 
+// MARK: - Backdrop
+
+/// The faint engineering grid behind every window body.
+struct GridBackground: View {
+    var body: some View {
+        Canvas { ctx, size in
+            var path = Path()
+            var x: CGFloat = 0.5
+            while x < size.width { path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: size.height)); x += Theme.gridStep }
+            var y: CGFloat = 0.5
+            while y < size.height { path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y)); y += Theme.gridStep }
+            ctx.stroke(path, with: .color(Theme.grid), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Four corner brackets, like a targeting reticle drawn around a readout.
+struct Reticle: View {
+    var color: Color = Theme.muted
+    var arm: CGFloat = 10
+    var inset: CGFloat = 6
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width, h = geo.size.height, i = inset, a = arm
+            Path { p in
+                p.move(to: CGPoint(x: i, y: i + a)); p.addLine(to: CGPoint(x: i, y: i)); p.addLine(to: CGPoint(x: i + a, y: i))
+                p.move(to: CGPoint(x: w - i - a, y: i)); p.addLine(to: CGPoint(x: w - i, y: i)); p.addLine(to: CGPoint(x: w - i, y: i + a))
+                p.move(to: CGPoint(x: i, y: h - i - a)); p.addLine(to: CGPoint(x: i, y: h - i)); p.addLine(to: CGPoint(x: i + a, y: h - i))
+                p.move(to: CGPoint(x: w - i - a, y: h - i)); p.addLine(to: CGPoint(x: w - i, y: h - i)); p.addLine(to: CGPoint(x: w - i, y: h - i - a))
+            }
+            .stroke(color, lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A blinking terminal cursor block.
+struct Cursor: View {
+    var color: Color = Theme.accent
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 0.6)) { ctx in
+            let on = Int(ctx.date.timeIntervalSinceReferenceDate / 0.6) % 2 == 0
+            Rectangle()
+                .fill(color)
+                .frame(width: 7, height: 12)
+                .opacity(on ? 1 : 0.15)
+        }
+    }
+}
+
 // MARK: - Window chrome
 
-/// A white window with a dark title bar, like `.window` on the site. The
-/// optional close dot mirrors the site's `.window-close`; windows that have
-/// macOS's own controls leave it out. `mark` sets the title in the marker
-/// font, the way the site's wordmark is. `floating` adds the rounded corners
-/// and shadow for a window drawn inside another; a window that *is* the
-/// macOS window turns it off.
+/// A black window with a thin ruled title bar. The optional close control is
+/// a small square; windows that have macOS's own controls leave it out.
+/// `mark` sets the title as the dot-matrix wordmark. `floating` adds the
+/// rounded corners and shadow for a window drawn inside another; a window
+/// that *is* the macOS window turns it off.
 struct DesktopWindow<Content: View>: View {
     var title: String
     var trailing: String? = nil
@@ -78,11 +158,14 @@ struct DesktopWindow<Content: View>: View {
         let shape = RoundedRectangle(cornerRadius: floating ? Theme.windowRadius : 0, style: .continuous)
         VStack(spacing: 0) {
             WindowTitlebar(title: title, trailing: trailing, onClose: onClose, mark: mark, height: titlebarHeight)
+            Rule()
             content
         }
+        .background(GridBackground())
         .background(Theme.windowBG)
         .clipShape(shape)
-        .shadow(color: .black.opacity(floating ? 0.24 : 0), radius: 24, y: 14)
+        .overlay(shape.stroke(Theme.border, lineWidth: floating ? 1 : 0))
+        .shadow(color: .black.opacity(floating ? 0.6 : 0), radius: 28, y: 16)
     }
 }
 
@@ -96,10 +179,10 @@ struct WindowTitlebar: View {
     var body: some View {
         ZStack {
             Theme.titlebar
-            HStack {
+            HStack(spacing: 10) {
                 if let onClose {
                     Button(action: onClose) {
-                        Circle().fill(.white).frame(width: 16, height: 16)
+                        Rectangle().fill(Theme.accent).frame(width: 10, height: 10)
                     }
                     .buttonStyle(.plain)
                     .help("Close")
@@ -107,126 +190,150 @@ struct WindowTitlebar: View {
                 Spacer()
                 if let trailing {
                     Text(trailing)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .font(Theme.mono(11, .medium))
+                        .tracking(Theme.labelTracking)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Theme.accent)
                 }
             }
-            .padding(.horizontal, 15)
-            // `mark` sets a small wordmark in the marker font, tilted like
-            // the site's logo; otherwise a plain window title.
-            Text(title)
-                .font(mark ? Theme.mark(15) : .system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-                .rotationEffect(.degrees(mark ? -2 : 0))
-                .lineLimit(1)
-                .padding(.horizontal, 80)
+            .padding(.horizontal, 16)
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(mark ? Theme.dot(20) : Theme.mono(12, .bold))
+                    .tracking(mark ? 3 : Theme.labelTracking)
+                    .textCase(.uppercase)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Text("::").font(Theme.mono(12, .bold)).foregroundStyle(Theme.muted)
+            }
+            .padding(.horizontal, 90)
         }
         .frame(height: height)
     }
 }
 
-/// The 1px separators the site uses between a window body and its status bar.
+/// The 1px separators between a window's zones.
 struct Rule: View {
     var body: some View { Theme.rule.frame(height: 1) }
 }
 
-/// Uppercase group label, like `.links-date`.
+/// Uppercase group label with a two-digit readout: `NOW :: 03`.
 struct SectionLabel: View {
     let title: String
     let count: Int
     var tint: Color = Theme.muted
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text(title.uppercased()).tracking(0.9).foregroundStyle(tint)
-            Text("\(count)").foregroundStyle(Theme.muted)
+        HStack(spacing: 8) {
+            Text(title.uppercased())
+                .font(Theme.mono(11, .bold))
+                .tracking(Theme.labelTracking)
+                .foregroundStyle(tint)
+            Text("::").font(Theme.mono(11, .bold)).foregroundStyle(Theme.muted)
+            Text(Theme.readout(count))
+                .font(Theme.dot(15))
+                .foregroundStyle(tint)
+            Rectangle().fill(Theme.rule).frame(height: 1)
         }
-        .font(.system(size: 11.5, weight: .bold))
     }
 }
 
-/// The site's "hello." — a marker headline with a short bold line under it.
+/// A dot-matrix headline with a short mono line under it.
 struct MarkHeadline: View {
     let mark: String
     let sub: String
 
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
             Text(mark)
-                .font(Theme.mark(42))
+                .font(Theme.dot(40))
+                .tracking(4)
+                .textCase(.uppercase)
                 .foregroundStyle(Theme.ink)
-                .rotationEffect(.degrees(-2))
             Text(sub)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.muted)
+                .font(Theme.mono(12))
+                .foregroundStyle(Theme.body)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 300)
+                .lineSpacing(3)
+                .frame(maxWidth: 320)
         }
+        .padding(28)
+        .overlay(Reticle(color: Theme.border, arm: 14, inset: 0))
     }
 }
 
 // MARK: - Controls
 
-/// `.pomo-btn`: a flat rounded pill. Primary is filled with the accent.
+/// A square, letterspaced button. Primary is filled with the accent; quiet
+/// is a 1px outline.
 struct PillButtonStyle: ButtonStyle {
     enum Kind { case primary, quiet }
     var kind: Kind = .quiet
 
     func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
         configuration.label
-            .font(.system(size: 13, weight: .bold))
-            .foregroundStyle(kind == .primary ? Color.white : Theme.ink)
-            .padding(.horizontal, 18)
+            .font(Theme.mono(11.5, .bold))
+            .tracking(Theme.labelTracking)
+            .textCase(.uppercase)
+            .foregroundStyle(kind == .primary ? Theme.windowBG : Theme.ink)
+            .padding(.horizontal, 16)
             .padding(.vertical, 9)
-            .background(
-                RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
-                    .fill(kind == .primary ? Theme.accent : Theme.field)
-            )
-            .shadow(color: kind == .primary ? Theme.accent.opacity(0.35) : .clear, radius: 8, y: 4)
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .opacity(configuration.isPressed ? 0.9 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+            .background(shape.fill(kind == .primary ? Theme.accent : Theme.panel))
+            .overlay(shape.stroke(kind == .primary ? Theme.accent : Theme.border, lineWidth: 1))
+            .shadow(color: kind == .primary ? Theme.accent.opacity(0.45) : .clear, radius: 10, y: 0)
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(.easeOut(duration: 0.1), value: configuration.isPressed)
     }
 }
 
-/// `.window-statusbar a`: an accent-coloured text link.
+/// An accent-coloured text command, `[UNDO]` style.
 struct LinkButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(Theme.accent)
-            .underline(configuration.isPressed)
-            .contentShape(Rectangle())
+        HStack(spacing: 0) {
+            Text("[").foregroundStyle(Theme.muted)
+            configuration.label.foregroundStyle(Theme.accent)
+            Text("]").foregroundStyle(Theme.muted)
+        }
+        .font(Theme.mono(11.5, .bold))
+        .textCase(.uppercase)
+        .opacity(configuration.isPressed ? 0.6 : 1)
+        .contentShape(Rectangle())
     }
 }
 
-/// An input the way the site draws them: no border, a soft grey fill.
+/// An input: dark panel, 1px border, uppercase label above.
 struct FieldBox<Content: View>: View {
     let label: String
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label.uppercased())
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.8)
-                .foregroundStyle(Theme.muted)
+        let shape = RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 6) {
+                Text(label.uppercased())
+                Text("::").foregroundStyle(Theme.border)
+            }
+            .font(Theme.mono(10.5, .bold))
+            .tracking(Theme.labelTracking)
+            .foregroundStyle(Theme.muted)
             content()
                 .textFieldStyle(.plain)
-                .font(.system(size: 14))
+                .font(Theme.mono(13))
                 .foregroundStyle(Theme.ink)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 9)
-                .background(RoundedRectangle(cornerRadius: Theme.controlRadius, style: .continuous).fill(Theme.field))
+                .background(shape.fill(Theme.panel))
+                .overlay(shape.stroke(Theme.border, lineWidth: 1))
         }
     }
 }
 
 // MARK: - Window plumbing
 
-/// The theme is light-only, like the site, so each themed window is pinned
-/// to the Aqua appearance regardless of the system setting. Also hands the
-/// NSWindow to the caller for per-window tweaks (floating, draggable, …).
+/// The theme is dark-only, so each themed window is pinned to the dark
+/// appearance regardless of the system setting. Also hands the NSWindow to
+/// the caller for per-window tweaks (floating, draggable, …).
 private struct WindowStyler: NSViewRepresentable {
     var configure: (NSWindow) -> Void
 
@@ -234,7 +341,7 @@ private struct WindowStyler: NSViewRepresentable {
         let view = NSView()
         DispatchQueue.main.async {
             guard let window = view.window else { return }
-            window.appearance = NSAppearance(named: .aqua)
+            window.appearance = NSAppearance(named: .darkAqua)
             configure(window)
         }
         return view
@@ -245,7 +352,7 @@ private struct WindowStyler: NSViewRepresentable {
 
 extension View {
     func themedWindow(_ configure: @escaping (NSWindow) -> Void = { _ in }) -> some View {
-        environment(\.colorScheme, .light)
+        environment(\.colorScheme, .dark)
             .tint(Theme.accent)
             .background(WindowStyler(configure: configure))
     }
