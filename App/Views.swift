@@ -216,6 +216,10 @@ struct TaskList: View {
                 .padding(28)
         } else {
             ScrollView {
+                // Rows carry a section-scoped id. LazyVStack flattens both ForEach
+                // blocks into one identity space, so a task that moves from Now to
+                // Later (e.g. after a snooze) would otherwise keep its old row
+                // content — "Now", red accent — at its new position.
                 LazyVStack(alignment: .leading, spacing: 2) {
                     if !now.isEmpty {
                         SectionLabel(title: "Now", count: now.count, tint: Theme.accent)
@@ -223,6 +227,7 @@ struct TaskList: View {
                             .padding(.bottom, 8)
                         ForEach(now) { item in
                             TaskRow(item: item, editing: $editing)
+                                .id("now:" + item.id)
                         }
                     }
                     if !later.isEmpty {
@@ -232,6 +237,7 @@ struct TaskList: View {
                             .padding(.bottom, 8)
                         ForEach(later) { item in
                             TaskRow(item: item, editing: $editing)
+                                .id("later:" + item.id)
                         }
                     }
                 }
@@ -324,12 +330,12 @@ struct TaskRow: View {
                 Text("ZZ")
                     .font(Theme.mono(10.5, .bold))
                     .tracking(1)
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(hovering ? Theme.ink : Theme.body)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
-            .opacity(hovering || isNow ? 1 : 0.4)
+            .opacity(hovering || isNow ? 1 : 0.75)
             .help("Snooze")
             .padding(.top, 11)
             .padding(.trailing, 10)
