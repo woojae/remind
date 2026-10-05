@@ -47,11 +47,7 @@ struct SettingsView: View {
                 if notifier.authorized == false {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("Notifications are turned off for Remind.").foregroundStyle(.red)
-                        Button("Open Notification Settings") {
-                            if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
-                                NSWorkspace.shared.open(url)
-                            }
-                        }
+                        Button("Open Notification Settings") { Platform.openNotificationSettings() }
                     }
                 }
             }
@@ -102,26 +98,5 @@ struct SettingsView: View {
             loginError = error.localizedDescription
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
-    }
-}
-
-struct HourPicker: View {
-    @Binding var hour: Int
-
-    var body: some View {
-        Picker("", selection: $hour) {
-            ForEach(0..<24, id: \.self) { h in
-                Text(Self.name(h)).tag(h)
-            }
-        }
-        .labelsHidden()
-        .frame(width: 90)
-    }
-
-    static func name(_ h: Int) -> String {
-        let df = DateFormatter()
-        df.dateFormat = "h a"
-        let d = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: Date())!
-        return df.string(from: d)
     }
 }

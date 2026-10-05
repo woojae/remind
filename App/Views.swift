@@ -1,9 +1,12 @@
-import AppKit
 import EventKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 // MARK: - Main window
 
+#if os(macOS)
 /// The main window is a single black panel, edge to edge: a ruled title bar
 /// carrying the dot-matrix wordmark (and the macOS traffic lights), then the
 /// gridded body.
@@ -47,10 +50,13 @@ struct MainView: View {
         }
     }
 }
+#endif
 
 /// `.window-statusbar`: what's due, or the undo line right after completing.
+/// On the phone the trailing hint becomes the way into Settings.
 struct StatusBar: View {
     @EnvironmentObject var store: TaskStore
+    var onSettings: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 8) {
@@ -67,7 +73,11 @@ struct StatusBar: View {
                 Cursor(color: store.now.isEmpty ? Theme.muted : Theme.accent)
                 Text(summary)
                 Spacer()
-                Text("⌘N NEW")
+                if let onSettings {
+                    Button("Settings", action: onSettings).buttonStyle(LinkButtonStyle())
+                } else {
+                    Text("⌘N NEW")
+                }
             }
         }
         .font(Theme.mono(11, .medium))
@@ -111,6 +121,8 @@ struct QuickAddBar: View {
                     .foregroundStyle(Theme.ink)
                     .focused($focused)
                     .onSubmit(submit)
+                #if os(macOS)
+                // iOS keyboards have their own dictation key.
                 Button {
                     focused = true
                     NSApp.sendAction(NSSelectorFromString("startDictation:"), to: nil, from: nil)
@@ -121,6 +133,16 @@ struct QuickAddBar: View {
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.muted)
                 .help("Dictate a task")
+                #else
+                if !text.isEmpty {
+                    Button(action: submit) {
+                        Image(systemName: "return")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.accent)
+                }
+                #endif
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
@@ -146,8 +168,17 @@ struct QuickAddBar: View {
             }
         }
         .padding(16)
+        #if os(macOS)
+        // On the phone this would raise the keyboard over the list at every
+        // launch; there the user taps the field when they want it.
         .onAppear { focused = true }
+        #else
+        .submitLabel(.done)
+        #endif
         .onReceive(NotificationCenter.default.publisher(for: Notifier.openMainWindow)) { _ in
+            focused = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notifier.openQuickAdd)) { _ in
             focused = true
         }
     }
@@ -161,6 +192,7 @@ struct QuickAddBar: View {
     }
 }
 
+#if os(macOS)
 /// The compact floating panel opened from the menu bar. Just the quick-add
 /// field: type, Return, gone.
 struct QuickAddPanel: View {
@@ -199,6 +231,7 @@ struct QuickAddPanel: View {
         }
     }
 }
+#endif
 
 // MARK: - List
 
@@ -291,7 +324,7 @@ struct TaskRow: View {
                     if !item.listName.isEmpty {
                         Text("::").foregroundStyle(Theme.border)
                         Rectangle()
-                            .fill(item.listColor.map(Color.init) ?? Theme.muted)
+                            .fill(item.listColor ?? Theme.muted)
                             .frame(width: 6, height: 6)
                         Text(item.listName).truncationMode(.tail)
                     }
@@ -332,7 +365,9 @@ struct TaskRow: View {
                     .tracking(1)
                     .foregroundStyle(hovering ? Theme.ink : Theme.body)
             }
+            #if os(macOS)
             .menuStyle(.borderlessButton)
+            #endif
             .menuIndicator(.hidden)
             .fixedSize()
             .opacity(hovering || isNow ? 1 : 0.75)
@@ -342,7 +377,9 @@ struct TaskRow: View {
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
-        .onTapGesture(count: 2) { editing = item }
+        // Double-click on the Mac; there is no double-tap convention on the
+        // phone, so a single tap opens the editor there.
+        .onTapGesture(count: Platform.isTouch ? 1 : 2) { editing = item }
         .contextMenu {
             Button("Done") { store.complete(item) }
             Menu("Snooze") { SnoozeButtons(item: item) }
@@ -496,7 +533,9 @@ struct EditorView: View {
             }
             .padding(24)
         }
+        #if os(macOS)
         .frame(width: 440)
+        #endif
         .themedWindow()
     }
 }
@@ -513,15 +552,37 @@ struct AccessView: View {
             HStack(spacing: 10) {
                 Button("Request Access") { Task { await store.retryAccess() } }
                     .buttonStyle(PillButtonStyle(kind: .primary))
-                Button("System Settings") {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-                .buttonStyle(PillButtonStyle())
+                Button(Platform.isTouch ? "Settings" : "System Settings") { Platform.openPrivacySettings() }
+                    .buttonStyle(PillButtonStyle())
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(28)
+    }
+}
+
+// MARK: - Shared controls
+
+/// Hour-of-day picker used by both settings screens.
+struct HourPicker: View {
+    @Binding var hour: Int
+
+    var body: some View {
+        Picker("", selection: $hour) {
+            ForEach(0..<24, id: \.self) { h in
+                Text(Self.name(h)).tag(h)
+            }
+        }
+        .labelsHidden()
+        #if os(macOS)
+        .frame(width: 90)
+        #endif
+    }
+
+    static func name(_ h: Int) -> String {
+        let df = DateFormatter()
+        df.dateFormat = "h a"
+        let d = Calendar.current.date(bySettingHour: h, minute: 0, second: 0, of: Date())!
+        return df.string(from: d)
     }
 }

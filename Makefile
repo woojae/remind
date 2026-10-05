@@ -23,7 +23,7 @@ APPFLAGS   := -O -parse-as-library -target $(ARCH)-apple-macosx14.0 \
               -framework UserNotifications -framework ServiceManagement
 APPINSTALL ?= $(HOME)/Applications
 
-.PHONY: all build install uninstall clean run auth app run-app install-app uninstall-app icon
+.PHONY: all build install uninstall clean run auth app run-app install-app uninstall-app icon ios-icon xcodeproj
 
 all: build
 
@@ -77,6 +77,22 @@ $(APPBIN): $(APPSOURCES) $(APPPLIST) $(ICNS) $(FONTS)
 	printf 'APPL????' > $(APPDIR)/Contents/PkgInfo
 	codesign --sign - --force --deep $(APPDIR)
 	@echo "built $(APPDIR)"
+
+# --- iOS ---------------------------------------------------------------------
+# The iOS app is built and signed by Xcode. `make xcodeproj` turns project.yml
+# into Remind.xcodeproj (needs `brew install xcodegen`); open it, pick your
+# team under Signing & Capabilities, choose your phone, and press Run.
+
+IOSICON := iOS/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+
+ios-icon: $(IOSICON)
+
+$(IOSICON): App/mkicon.swift
+	swift App/mkicon.swift --ios $@
+
+xcodeproj: $(IOSICON) project.yml
+	xcodegen generate
+	@echo "open Remind.xcodeproj"
 
 run-app: app
 	-pkill -x $(APP) 2>/dev/null; sleep 0.5

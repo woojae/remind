@@ -76,6 +76,57 @@ The app's own bookkeeping — when each task was last announced and how many
 times it has been snoozed — lives in
 `~/Library/Application Support/Remind/state.json`, not in the reminder.
 
+## Remind for iPhone
+
+The same app, on the phone: one screen with the quick-add field, the Now and
+Later list, and the editor and settings as sheets. It reads the same Reminders
+database, so Done and Snooze on either device show up on the other as soon as
+iCloud catches up.
+
+The one real difference is how nagging works. iOS suspends an app seconds after
+it leaves the screen, so there is no timer to nag from. Instead, every change to
+the list plans the next stretch of notifications and hands them to iOS: for each
+task, one per repeat interval, spaced apart, skipping quiet hours, as far ahead
+as iOS's 64-request budget reaches (about a day for one or two tasks, a few
+hours for several). iOS fires them whether or not the app is open. Done and
+Snooze on a banner run in the background and re-plan. Opening the app, or a
+background refresh when iOS grants one, extends the plan. Settings shows how
+much is queued and how far it reaches.
+
+Nag bookkeeping (last notified, snooze count) is per device, so a task that is
+due rings on both the Mac and the phone, each on its own clock.
+
+### Build and run on your phone
+
+The iOS app is built and signed by Xcode. The project is generated from
+`project.yml` with [xcodegen](https://github.com/yonaskolb/XcodeGen):
+
+```bash
+brew install xcodegen   # once
+make xcodeproj          # -> Remind.xcodeproj
+open Remind.xcodeproj
+```
+
+Then, in Xcode:
+
+1. **Xcode › Settings › Accounts**, add your Apple ID. A free account is
+   enough to run on your own phone.
+2. Select the **RemindiOS** target › **Signing & Capabilities**, and pick your
+   Team. Change the bundle identifier if Xcode says it's taken.
+3. Plug in the phone, unlock it, tap Trust. Turn on **Developer Mode** on the
+   phone (Settings › Privacy & Security) if asked.
+4. Pick your phone in the toolbar's device menu and press **Run**.
+5. The first launch stops with "Untrusted Developer". On the phone go to
+   **Settings › General › VPN & Device Management**, tap your Apple ID, Trust,
+   then run again.
+
+With a free account the install expires after seven days; re-run from Xcode to
+renew. A paid developer account can push builds through TestFlight instead.
+
+`Remind.xcodeproj` is ignored by git; `project.yml` is the source of truth.
+Re-run `make xcodeproj` after adding files. The project also has a **Remind**
+macOS target, but `make app` remains the canonical Mac build.
+
 ## Install
 
 ```bash
@@ -168,7 +219,7 @@ The CLI's `Sources/` is five files:
 - `Args.swift` — option parsing
 - `Help.swift` — help text
 
-The app in `App/` reuses `Store.swift` and `DateParse.swift` and adds:
+The macOS app in `App/` reuses `Store.swift` and `DateParse.swift` and adds:
 
 - `RemindApp.swift` — scenes (window, menu bar item, settings) and app delegate
 - `TaskStore.swift` — the observable list, completion, snooze, recurrence
@@ -177,7 +228,17 @@ The app in `App/` reuses `Store.swift` and `DateParse.swift` and adds:
 - `QuickAdd.swift` — pulls a due date out of a typed sentence
 - `Views.swift`, `SettingsView.swift`, `Display.swift` — SwiftUI
 - `Theme.swift` — palette, window chrome, and control styles
-- `mkicon.swift` — renders the app icon at build time
+- `mkicon.swift` — renders the app icon at build time (`--ios` for the phone's)
+
+The iOS app in `iOS/` compiles everything above except the Mac-only files
+(`Notifier`, `RemindApp`, `SettingsView`, `Snapshot`), plus:
+
+- `RemindApp.swift` — the single-window scene, app delegate, background refresh
+- `Notifier.swift` — plans the nags ahead and hands them to iOS
+- `PhoneViews.swift`, `PhoneSettingsView.swift` — the one screen and its sheets
+
+The handful of places the shared code touches AppKit or UIKit go through
+`Platform` in `App/Theme.swift`.
 
 Two macOS details the `Makefile` handles, both of which break the binary if
 skipped:

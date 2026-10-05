@@ -2,10 +2,14 @@
 // with a faint grid, reticle corners, an off-white bell and a hot-pink
 // status dot. Run by `make`:
 //   swift App/mkicon.swift <output.iconset dir>
+// With --ios it renders a single full-bleed 1024px PNG instead (iOS masks
+// its own corners and treats transparency as black):
+//   swift App/mkicon.swift --ios <output.png>
 import AppKit
 
-let outDir = CommandLine.arguments.dropFirst().first ?? "AppIcon.iconset"
-try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+let args = Array(CommandLine.arguments.dropFirst())
+let fullBleed = args.first == "--ios"
+let outPath = (fullBleed ? args.dropFirst().first : args.first) ?? (fullBleed ? "AppIcon.png" : "AppIcon.iconset")
 
 let plateColor = NSColor(srgbRed: 0x0a / 255, green: 0x0a / 255, blue: 0x0c / 255, alpha: 1)
 let ink = NSColor(srgbRed: 0xe8 / 255, green: 0xe6 / 255, blue: 0xdd / 255, alpha: 1)
@@ -16,13 +20,24 @@ let borderColor = NSColor.white.withAlphaComponent(0.16)
 func render(_ px: Int) -> Data? {
     let p = CGFloat(px)
     let size = NSSize(width: p, height: p)
-    let image = NSImage(size: size)
-    image.lockFocus()
-    guard let ctx = NSGraphicsContext.current?.cgContext else { return nil }
+    // Draw into a bitmap of exactly px × px: an NSImage focused on a Retina
+    // display would render at 2× and the iOS icon must be 1024 pixels.
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: px, pixelsHigh: px,
+                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                     colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+          let gctx = NSGraphicsContext(bitmapImageRep: rep) else { return nil }
+    rep.size = size
+    NSGraphicsContext.saveGraphicsState()
+    NSGraphicsContext.current = gctx
+    defer { NSGraphicsContext.restoreGraphicsState() }
+    let ctx = gctx.cgContext
 
-    // Plate: the standard macOS rounded-square footprint.
-    let rect = NSRect(origin: .zero, size: size).insetBy(dx: p * 0.06, dy: p * 0.06)
-    let plate = NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.22, yRadius: rect.width * 0.22)
+    // Plate: the standard macOS rounded-square footprint, or the whole
+    // canvas for iOS.
+    let rect = fullBleed ? NSRect(origin: .zero, size: size)
+                         : NSRect(origin: .zero, size: size).insetBy(dx: p * 0.06, dy: p * 0.06)
+    let plate = fullBleed ? NSBezierPath(rect: rect)
+                          : NSBezierPath(roundedRect: rect, xRadius: rect.width * 0.22, yRadius: rect.width * 0.22)
     plateColor.setFill()
     plate.fill()
 
@@ -50,9 +65,11 @@ func render(_ px: Int) -> Data? {
 
     // Thin border and reticle corners.
     if px >= 32 {
-        borderColor.setStroke()
-        plate.lineWidth = max(p / 256, 1)
-        plate.stroke()
+        if !fullBleed {
+            borderColor.setStroke()
+            plate.lineWidth = max(p / 256, 1)
+            plate.stroke()
+        }
 
         let inset = rect.insetBy(dx: p * 0.16, dy: p * 0.16)
         let arm = p * 0.07
@@ -92,15 +109,19 @@ func render(_ px: Int) -> Data? {
     NSBezierPath(rect: dotRect).fill()
     ctx.restoreGState()
 
-    image.unlockFocus()
-    guard let tiff = image.tiffRepresentation, let rep = NSBitmapImageRep(data: tiff) else { return nil }
-    rep.size = size
+    gctx.flushGraphics()
     return rep.representation(using: .png, properties: [:])
 }
 
-for (name, px) in [("16x16", 16), ("16x16@2x", 32), ("32x32", 32), ("32x32@2x", 64),
-                   ("128x128", 128), ("128x128@2x", 256), ("256x256", 256), ("256x256@2x", 512),
-                   ("512x512", 512), ("512x512@2x", 1024)] {
-    guard let data = render(px) else { fputs("could not render \(px)px\n", stderr); exit(1) }
-    try! data.write(to: URL(fileURLWithPath: "\(outDir)/icon_\(name).png"))
+if fullBleed {
+    guard let data = render(1024) else { fputs("could not render 1024px\n", stderr); exit(1) }
+    try! data.write(to: URL(fileURLWithPath: outPath))
+} else {
+    try? FileManager.default.createDirectory(atPath: outPath, withIntermediateDirectories: true)
+    for (name, px) in [("16x16", 16), ("16x16@2x", 32), ("32x32", 32), ("32x32@2x", 64),
+                       ("128x128", 128), ("128x128@2x", 256), ("256x256", 256), ("256x256@2x", 512),
+                       ("512x512", 512), ("512x512@2x", 1024)] {
+        guard let data = render(px) else { fputs("could not render \(px)px\n", stderr); exit(1) }
+        try! data.write(to: URL(fileURLWithPath: "\(outPath)/icon_\(name).png"))
+    }
 }
