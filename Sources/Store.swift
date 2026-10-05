@@ -257,7 +257,9 @@ enum Priority {
 /// say `remind done 3`. Row numbers are never used as durable identity.
 enum IndexCache {
     private static var url: URL {
-        let base = FileManager.default.homeDirectoryForCurrentUser
+        // NSHomeDirectory rather than homeDirectoryForCurrentUser: the latter
+        // is macOS-only and this file is shared with the iOS app.
+        let base = URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(".cache/remind", isDirectory: true)
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         return base.appendingPathComponent("last-list.json")

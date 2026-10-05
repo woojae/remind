@@ -59,4 +59,15 @@ enum Prefs {
         if start < end { return hour >= start && hour < end }
         return hour >= start || hour < end          // wraps midnight, e.g. 22 → 8
     }
+
+    /// `date` itself if notifications are allowed then; otherwise the moment
+    /// quiet hours end. Used to pre-schedule nags on iOS.
+    static func nextAllowed(after date: Date) -> Date {
+        guard isQuiet(at: date) else { return date }
+        let cal = Calendar.current
+        let end = defaults.integer(forKey: Key.quietEnd)
+        var d = cal.date(bySettingHour: end, minute: 0, second: 0, of: cal.startOfDay(for: date)) ?? date
+        if d <= date { d = cal.date(byAdding: .day, value: 1, to: d) ?? date }
+        return d
+    }
 }

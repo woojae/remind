@@ -1,5 +1,9 @@
-import AppKit
 import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// Control-room Remind: a near-black terminal with a faint grid behind it,
 /// dot-matrix headlines, monospace copy and one hot accent for whatever is
@@ -41,7 +45,7 @@ enum Theme {
         case .medium:  name = "JetBrainsMonoRoman-Medium"
         case .bold:    name = "JetBrainsMonoRoman-Bold"
         }
-        if NSFont(name: name, size: size) != nil { return .custom(name, size: size) }
+        if Platform.fontExists(name) { return .custom(name, size: size) }
         let w: Font.Weight = weight == .regular ? .regular : weight == .medium ? .medium : .bold
         return .system(size: size, weight: w, design: .monospaced)
     }
@@ -49,7 +53,7 @@ enum Theme {
     /// Doto, the dot-matrix display face used for the wordmark, headlines
     /// and counters. Falls back to bold system monospace.
     static func dot(_ size: CGFloat) -> Font {
-        NSFont(name: "Doto-Black_Bold", size: size) != nil
+        Platform.fontExists("Doto-Black_Bold")
             ? .custom("Doto-Black_Bold", size: size)
             : .system(size: size, weight: .black, design: .monospaced)
     }
@@ -329,8 +333,57 @@ struct FieldBox<Content: View>: View {
     }
 }
 
+// MARK: - Platform shims
+
+/// The handful of places the shared code has to touch AppKit or UIKit.
+enum Platform {
+    #if os(macOS)
+    static let isTouch = false
+    #else
+    static let isTouch = true
+    #endif
+
+    static func fontExists(_ name: String) -> Bool {
+        #if os(macOS)
+        NSFont(name: name, size: 12) != nil
+        #else
+        UIFont(name: name, size: 12) != nil
+        #endif
+    }
+
+    static func open(_ url: URL) {
+        #if os(macOS)
+        NSWorkspace.shared.open(url)
+        #else
+        UIApplication.shared.open(url)
+        #endif
+    }
+
+    /// Where the OS lets the user flip this app's permissions.
+    static func openPrivacySettings() {
+        #if os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders") {
+            NSWorkspace.shared.open(url)
+        }
+        #else
+        if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+        #endif
+    }
+
+    static func openNotificationSettings() {
+        #if os(macOS)
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+        #else
+        if let url = URL(string: UIApplication.openNotificationSettingsURLString) { UIApplication.shared.open(url) }
+        #endif
+    }
+}
+
 // MARK: - Window plumbing
 
+#if os(macOS)
 /// The theme is dark-only, so each themed window is pinned to the dark
 /// appearance regardless of the system setting. Also hands the NSWindow to
 /// the caller for per-window tweaks (floating, draggable, …).
@@ -357,3 +410,12 @@ extension View {
             .background(WindowStyler(configure: configure))
     }
 }
+#else
+extension View {
+    /// iOS has no window to configure; the theme is just forced dark.
+    func themedWindow() -> some View {
+        environment(\.colorScheme, .dark)
+            .tint(Theme.accent)
+    }
+}
+#endif

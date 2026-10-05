@@ -1,6 +1,12 @@
-import AppKit
 import EventKit
 import Foundation
+import SwiftUI
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+import UserNotifications
+#endif
 
 /// One row in the list. A value copy of the EKReminder, so views never touch
 /// EventKit objects directly.
@@ -10,7 +16,7 @@ struct TaskItem: Identifiable, Equatable {
     let notes: String?
     let listName: String
     let listID: String
-    let listColor: NSColor?
+    let listColor: Color?
     /// Effective due moment. All-day reminders resolve to the morning hour.
     let due: Date?
     let isAllDay: Bool
@@ -103,12 +109,23 @@ final class TaskStore: ObservableObject {
         state.prune(keeping: Set(map.keys))
         items = found.map(makeItem)
         clock = Date()
-        NSApp.dockTile.badgeLabel = now.isEmpty ? nil : String(now.count)
+        updateBadge()
     }
 
     func tick() {
         clock = Date()
-        NSApp.dockTile.badgeLabel = now.isEmpty ? nil : String(now.count)
+        updateBadge()
+    }
+
+    /// Dock badge on the Mac, home-screen badge on the phone: the due-now count.
+    private func updateBadge() {
+        let count = now.count
+        #if os(macOS)
+        NSApp.dockTile.badgeLabel = count == 0 ? nil : String(count)
+        #else
+        guard Bundle.main.bundleIdentifier != nil else { return }
+        UNUserNotificationCenter.current().setBadgeCount(count)
+        #endif
     }
 
     private func makeItem(_ r: EKReminder) -> TaskItem {
@@ -116,7 +133,7 @@ final class TaskStore: ObservableObject {
             guard r.isAllDay else { return d }
             return Calendar.current.date(bySettingHour: Prefs.morningHour, minute: 0, second: 0, of: d) ?? d
         }
-        let color = r.calendar?.cgColor.flatMap { NSColor(cgColor: $0) }
+        let color = r.calendar?.cgColor.map { Color(cgColor: $0) }
         return TaskItem(
             id: r.calendarItemIdentifier,
             title: r.title?.isEmpty == false ? r.title! : "(untitled)",
@@ -268,7 +285,7 @@ final class TaskStore: ObservableObject {
 
     func openInReminders(_ item: TaskItem) {
         if let url = URL(string: "x-apple-reminderkit://REMCDReminder/\(item.id)") {
-            NSWorkspace.shared.open(url)
+            Platform.open(url)
         }
     }
 
