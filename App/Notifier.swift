@@ -99,33 +99,34 @@ final class Notifier: NSObject, ObservableObject {
 
     // MARK: - Categories
 
-    /// One category per snooze rung, so the button can say exactly how long.
+    /// One category per suggested rung. Every category carries the whole
+    /// snooze ladder, so the notification offers the same choices as the
+    /// app's Snooze menu; the suggested rung is starred, as it is there.
     static func categories() -> [UNNotificationCategory] {
-        (0..<Snooze.rungs).map { step in
-            let alt = step < Snooze.morningStep ? "Tomorrow morning" : "Snooze 1 hour"
+        (0..<Snooze.rungs).map { suggested in
+            let snoozes = (0..<Snooze.rungs).map { step in
+                UNNotificationAction(
+                    identifier: "snooze.\(step)",
+                    title: (step == suggested ? "★ " : "") + Snooze.actionTitles[step],
+                    options: [])
+            }
             return UNNotificationCategory(
-                identifier: "task.\(step)",
-                actions: [
-                    UNNotificationAction(identifier: "done", title: "Done", options: []),
-                    UNNotificationAction(identifier: "snooze", title: Snooze.actionTitles[step], options: []),
-                    UNNotificationAction(identifier: "alt", title: alt, options: []),
-                ],
+                identifier: "task.\(suggested)",
+                actions: [UNNotificationAction(identifier: "done", title: "Done", options: [])] + snoozes,
                 intentIdentifiers: [],
                 options: [])
         }
     }
 
-    private func handle(action: String, category: String, id: String) {
+    private func handle(action: String, id: String) {
         guard let item = store.item(id) else { return }
-        let step = Int(category.split(separator: ".").last ?? "") ?? 0
         let options = Snooze.options()
         switch action {
         case "done":
             store.complete(item)
-        case "snooze":
-            store.snooze(item, until: options[min(step, options.count - 1)].date)
-        case "alt":
-            store.snooze(item, until: options[step < Snooze.morningStep ? Snooze.morningStep : 2].date)
+        case let a where a.hasPrefix("snooze."):
+            let step = Int(a.dropFirst("snooze.".count)) ?? 0
+            store.snooze(item, until: options[min(max(step, 0), options.count - 1)].date)
         default:
             store.highlighted = id
             NotificationCenter.default.post(name: Self.openMainWindow, object: nil)
@@ -150,10 +151,9 @@ extension Notifier: UNUserNotificationCenterDelegate {
         didReceive response: UNNotificationResponse
     ) async {
         let action = response.actionIdentifier
-        let category = response.notification.request.content.categoryIdentifier
         let id = response.notification.request.content.userInfo["id"] as? String ?? ""
         await MainActor.run {
-            Notifier.shared.handle(action: action, category: category, id: id)
+            Notifier.shared.handle(action: action, id: id)
         }
     }
 }

@@ -4,7 +4,7 @@ import Foundation
 /// `remind list --json overdue` can never mistake a positional for an argument.
 struct Args {
     static let valueOptions: Set<String> = [
-        "list", "due", "notes", "priority", "title", "url", "move", "limit", "sort", "remind-at",
+        "list", "due", "notes", "priority", "title", "url", "move", "limit", "sort", "remind-at", "until",
     ]
     static let boolOptions: Set<String> = [
         "json", "all", "completed", "done", "force", "no-alarm", "help", "overdue",

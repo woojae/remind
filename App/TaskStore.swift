@@ -72,7 +72,10 @@ final class TaskStore: ObservableObject {
     }
 
     /// Coalesces the burst of change notifications EventKit sends per save.
+    /// State is reloaded at once, not after the debounce, so a snooze from
+    /// the CLI is in memory before anything here can save over it.
     func scheduleRefresh() {
+        state = StateFile.load()
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             try? await Task.sleep(nanoseconds: 400_000_000)
@@ -100,6 +103,9 @@ final class TaskStore: ObservableObject {
         var map: [String: EKReminder] = [:]
         for r in found { map[r.calendarItemIdentifier] = r }
         reminders = map
+        // The CLI's `remind snooze` edits state.json directly; every change
+        // made here is saved at once, so disk is never behind memory.
+        state = StateFile.load()
         state.prune(keeping: Set(map.keys))
         items = found.map(makeItem)
         clock = Date()
