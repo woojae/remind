@@ -33,7 +33,9 @@ reminders for people who forget reminders.
   (default 10 PM–8 AM) hold everything until morning.
 - **Snooze scales.** The ladder is 10 min → 30 min → 1 h → 3 h → 6 h → 9 h →
   tomorrow morning → 3 days → a week. Every option shows the actual time it lands on,
-  and the suggested rung climbs each time you snooze the same task.
+  and the suggested rung climbs each time you snooze the same task. The
+  notification's Options menu offers the whole ladder too, with the
+  suggested rung starred.
 - **Recurring tasks don't pile up.** Completing a repeating task you missed
   schedules the next occurrence from *now*, not from the date you skipped.
 - **It is your Reminders database.** Siri, the Reminders app, and your phone
@@ -75,6 +77,8 @@ uncheck "Also set a Reminders alarm" in Remind's settings.
 The app's own bookkeeping — when each task was last announced and how many
 times it has been snoozed — lives in
 `~/Library/Application Support/Remind/state.json`, not in the reminder.
+`remind snooze` from the CLI updates the same file, so the app's suggested
+rung climbs and the nagging stops whichever way you snooze.
 
 ## Install
 
@@ -108,10 +112,11 @@ If no dialog appears, add your terminal under
 | `remind done <ref>…` | Mark complete. |
 | `remind undone <ref>…` | Reopen. |
 | `remind edit <ref>` | Change title, due date, notes, priority, URL, or list. |
+| `remind snooze <ref> [rung]` | Push along the app's snooze ladder (`1h`, `morning`, `week`, …), or `--until WHEN`. |
 | `remind show <ref>` | Everything about one reminder. |
 | `remind delete <ref>…` | Delete. Confirms first unless `--force`. |
 | `remind auth` | Check or request access. Exits non-zero if not granted. |
-| `remind help [topic]` | Topics: `add`, `list`, `edit`, `dates`. |
+| `remind help [topic]` | Topics: `add`, `list`, `edit`, `snooze`, `dates`. |
 
 ### Referring to a reminder
 
@@ -167,13 +172,13 @@ The CLI's `Sources/` is five files:
 - `Format.swift` — table, detail, and JSON rendering
 - `Args.swift` — option parsing
 - `Help.swift` — help text
+- `Snooze.swift` — the snooze ladder and the on-disk nag state, shared with the app
 
-The app in `App/` reuses `Store.swift` and `DateParse.swift` and adds:
+The app in `App/` reuses `Store.swift`, `DateParse.swift` and `Snooze.swift` and adds:
 
 - `RemindApp.swift` — scenes (window, menu bar item, settings) and app delegate
 - `TaskStore.swift` — the observable list, completion, snooze, recurrence
 - `Notifier.swift` — the repeat-until-done notification loop and its actions
-- `Snooze.swift` — the snooze ladder and the on-disk nag state
 - `QuickAdd.swift` — pulls a due date out of a typed sentence
 - `Views.swift`, `SettingsView.swift`, `Display.swift` — SwiftUI
 - `Theme.swift` — palette, window chrome, and control styles

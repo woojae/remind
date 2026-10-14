@@ -67,6 +67,16 @@ expect "clear due date"   "$("$BIN" edit "$short" --no-due --json | jq -r 'has("
 expect "set priority"     "$("$BIN" edit "$short" --priority high --json | jq -r .priority)" "high"
 expect "rename"           "$("$BIN" edit "$short" --title "smoke renamed" --json | jq -r .title)" "smoke renamed"
 
+step "snooze"
+# Writes one entry to the app's state.json; the app prunes it once the
+# reminder is deleted below.
+before=$(date +%s)
+due=$("$BIN" snooze "$short" 1h --json | jq -r .due)
+due_s=$(date -j -f '%Y-%m-%dT%H:%M:%S%z' "$(sed 's/:\([0-9][0-9]\)$/\1/' <<<"$due")" +%s 2>/dev/null || echo 0)
+delta=$(( due_s - before ))
+if [ "$delta" -ge 3500 ] && [ "$delta" -le 3700 ]; then ok "snooze 1h lands about an hour out"; else bad "snooze 1h — due '$due' is ${delta}s away"; fi
+expect "snooze count recorded" "$("$BIN" snooze "$short" 10m --json | jq -r .snoozeCount)" "2"
+
 step "complete / reopen"
 expect "mark done"   "$("$BIN" done   "$short" --json | jq -r '.[0].completed')" "true"
 expect "reopen"      "$("$BIN" undone "$short" --json | jq -r '.[0].completed')" "false"

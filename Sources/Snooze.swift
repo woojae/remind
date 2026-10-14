@@ -16,7 +16,7 @@ enum Snooze {
     static let actionTitles = [
         "Snooze 10 min", "Snooze 30 min", "Snooze 1 hour", "Snooze 3 hours",
         "Snooze 6 hours", "Snooze 9 hours",
-        "Snooze until tomorrow", "Snooze 3 days", "Snooze a week",
+        "Snooze until morning", "Snooze 3 days", "Snooze a week",
     ]
     static var rungs: Int { actionTitles.count }
     /// The rung that lands on the next morning; everything before it is a
@@ -27,7 +27,20 @@ enum Snooze {
         min(max(snoozeCount, 0), rungs - 1)
     }
 
-    static func options(now: Date = Date(), morningHour: Int = Prefs.morningHour) -> [SnoozeOption] {
+    /// Keywords the CLI accepts for each rung, in ladder order.
+    static let keywords: [[String]] = [
+        ["10m", "10min", "10"], ["30m", "30min", "30"], ["1h", "1hr", "hour"], ["3h", "3hr"],
+        ["6h", "6hr"], ["9h", "9hr"], ["morning", "tomorrow"], ["3d", "3days"], ["week", "1w", "7d"],
+    ]
+
+    /// The rung a user named: a 1-based number or one of `keywords`.
+    static func step(named raw: String) -> Int? {
+        let key = raw.lowercased().replacingOccurrences(of: " ", with: "")
+        if let n = Int(key), (1...rungs).contains(n), key.count <= 1 { return n - 1 }
+        return keywords.firstIndex { $0.contains(key) }
+    }
+
+    static func options(now: Date = Date(), morningHour: Int) -> [SnoozeOption] {
         let cal = Calendar.current
         let morning = nextMorning(after: now, hour: morningHour, cal: cal)
         let isToday = cal.isDate(morning, inSameDayAs: now)

@@ -42,6 +42,8 @@ struct Remind {
             try await Commands.delete(app, args)
         case "edit", "set", "update":
             try await Commands.edit(app, args)
+        case "snooze", "zz":
+            try await Commands.snooze(app, args)
         case "show", "info", "cat":
             try await Commands.show(app, args)
         case "version", "--version":
@@ -373,6 +375,72 @@ enum Commands {
         }
     }
 
+    // MARK: - snooze
+
+    /// Pushes a reminder along the same ladder Remind.app uses, and records
+    /// the snooze in the app's nag state so its suggested rung climbs too.
+    static func snooze(_ app: Reminders, _ args: Args) async throws {
+        try await app.requireAccess()
+        var refs = args.positionals
+        var named: Int?
+        if refs.count > 1, let step = Snooze.step(named: refs.last!) {
+            named = step
+            refs.removeLast()
+        }
+        let ref = refs.joined(separator: " ")
+        guard !ref.isEmpty else {
+            throw RemindError.usage("Which reminder? Usage: remind snooze <id|number|title> [rung] [--until WHEN]")
+        }
+
+        let pool = await app.fetch(in: nil, includeCompleted: false, onlyCompleted: false)
+        let reminder = try app.resolve(ref, among: pool)
+        let id = reminder.calendarItemIdentifier
+
+        var state = StateFile.load()
+        let count = state.snoozeCount[id] ?? 0
+        let now = Date()
+        let options = Snooze.options(now: now, morningHour: AppPrefs.morningHour)
+
+        let target: Date
+        var label: String
+        if let raw = args["until"] {
+            guard named == nil else { throw RemindError.usage("Pass a rung or --until, not both.") }
+            guard let parsed = DateParse.parse(raw) else { throw RemindError.badDate(raw) }
+            target = parsed.hasTime ? parsed.date
+                : Calendar.current.date(bySettingHour: AppPrefs.morningHour, minute: 0, second: 0, of: parsed.date)!
+            label = raw
+        } else {
+            let option = options[named ?? Snooze.suggestedStep(snoozeCount: count)]
+            target = option.date
+            label = option.label.lowercased()
+        }
+        guard target > now else { throw RemindError.usage("That moment has already passed.") }
+
+        // Write the state first: the app reloads it as soon as EventKit
+        // reports the save, which happens before this process exits.
+        state.snoozeCount[id] = count + 1
+        state.lastNotified[id] = nil
+        StateFile.save(state)
+        do {
+            reminder.setDue(ParsedDate(date: target, hasTime: true), attachAlarm: AppPrefs.attachAlarms)
+            try app.save(reminder)
+        } catch {
+            state.snoozeCount[id] = count == 0 ? nil : count
+            StateFile.save(state)
+            throw error
+        }
+
+        if args.has("json") {
+            var d = Format.dictionary(for: reminder)
+            d["snoozeCount"] = count + 1
+            print(Format.encode(d))
+        } else if !args.has("quiet") {
+            var line = Style.yellow("snoozed") + "  \(Reminders.shortID(reminder))  \(reminder.title ?? "")"
+            line += "  " + Style.yellow(Format.due(reminder, now: now)) + "  " + Style.dim("(\(label), ×\(count + 1))")
+            print(line)
+        }
+    }
+
     // MARK: - show
 
     static func show(_ app: Reminders, _ args: Args) async throws {
@@ -389,4 +457,15 @@ enum Commands {
             print(Format.detail(reminder))
         }
     }
+}
+
+/// Remind.app's settings, read from its defaults domain so the CLI lands on
+/// the same morning hour and alarm behaviour the app would.
+enum AppPrefs {
+    static let defaults = UserDefaults(suiteName: "com.wlee.remind.app")
+    static var morningHour: Int {
+        let h = defaults?.object(forKey: "morningHour") as? Int ?? 9
+        return (0...23).contains(h) ? h : 9
+    }
+    static var attachAlarms: Bool { defaults?.object(forKey: "attachAlarms") as? Bool ?? true }
 }

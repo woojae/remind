@@ -2,6 +2,13 @@ import Foundation
 
 /// User-adjustable behaviour. Views bind to the same keys through @AppStorage;
 /// non-view code reads through these accessors.
+extension Snooze {
+    /// The ladder measured from the user's configured morning hour.
+    static func options(now: Date = Date()) -> [SnoozeOption] {
+        options(now: now, morningHour: Prefs.morningHour)
+    }
+}
+
 enum Prefs {
     enum Key {
         static let repeatMinutes  = "repeatMinutes"   // how often a due task nags
